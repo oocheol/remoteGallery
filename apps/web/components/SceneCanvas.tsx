@@ -406,8 +406,30 @@ function CameraRig({
   useEffect(() => {
     const el = gl.domElement;
     el.tabIndex = 0;
+    // Physical codes keep movement working with Korean and other IME layouts.
+    const keyName = (e: KeyboardEvent) => {
+      if (/^Key[WASDEQ]$/.test(e.code)) return e.code.slice(3).toLowerCase();
+      if (e.code.startsWith("Shift")) return "shift";
+      return e.code.toLowerCase();
+    };
+    const editable = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      !!target.closest(
+        'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="dialog"]',
+      );
+    const clear = () => keys.current.clear();
     const down = (e: KeyboardEvent) => {
-      if (view !== "free" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (
+        view !== "free" ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        editable(e.target)
+      ) {
+        clear();
+        return;
+      }
+      const key = keyName(e);
       if (
         [
           "q",
@@ -421,21 +443,31 @@ function CameraRig({
           "arrowdown",
           "arrowleft",
           "arrowright",
-        ].includes(e.key.toLowerCase())
+        ].includes(key)
       ) {
-        keys.current.add(e.key.toLowerCase());
+        keys.current.add(key);
         e.preventDefault();
       }
     };
-    const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
-    const clear = () => keys.current.clear();
-    el.addEventListener("keydown", down);
+    const up = (e: KeyboardEvent) => keys.current.delete(keyName(e));
+    const focus = (e: FocusEvent) => {
+      if (editable(e.target)) clear();
+    };
+    const visibility = () => {
+      if (document.hidden) clear();
+    };
+    window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    el.addEventListener("blur", clear);
+    window.addEventListener("blur", clear);
+    window.addEventListener("focusin", focus);
+    document.addEventListener("visibilitychange", visibility);
     return () => {
-      el.removeEventListener("keydown", down);
+      clear();
+      window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
-      el.removeEventListener("blur", clear);
+      window.removeEventListener("blur", clear);
+      window.removeEventListener("focusin", focus);
+      document.removeEventListener("visibilitychange", visibility);
     };
   }, [gl, view]);
   useEffect(() => {
@@ -470,7 +502,6 @@ function CameraRig({
     };
     const stop = () => {
       pan = null;
-      keys.current.clear();
     };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -1072,6 +1103,7 @@ function GalleryScene(
 }
 
 export default function SceneCanvas(props: SceneCanvasProps) {
+  const [controlsVisible, setControlsVisible] = useState(true);
   const [command, setCommand] = useState<CameraCommand | null>(null);
   const [freeTarget, setFreeTarget] = useState<CameraTarget | null>(null);
   const focusedRequest = useRef(0);
@@ -1158,8 +1190,35 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           />
         </Canvas>
       </SceneBoundary>
-      {props.view !== "free" && !props.calibrating && (
-        <div className="scene-rotation" role="group" aria-label="도면 회전">
+      {!props.calibrating && (
+        <button
+          type="button"
+          className="btn ghost"
+          aria-expanded={controlsVisible}
+          aria-label={
+            controlsVisible ? "3D 조작 버튼 숨기기" : "3D 조작 버튼 보기"
+          }
+          onClick={() => setControlsVisible((value) => !value)}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 16,
+            background: "#fffffff0",
+            fontSize: 11,
+            minHeight: 30,
+            padding: "5px 9px",
+          }}
+        >
+          {controlsVisible ? "조작 버튼 숨기기" : "조작 버튼 보기"}
+        </button>
+      )}
+      {controlsVisible && props.view !== "free" && !props.calibrating && (
+        <div
+          className="scene-rotation"
+          role="group"
+          aria-label="도면 회전"
+          style={{ top: 54 }}
+        >
           <span className="scene-rotation-label">도면 회전</span>
           {(
             [
@@ -1183,14 +1242,14 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           ))}
         </div>
       )}
-      {props.view === "free" && !props.calibrating && (
+      {controlsVisible && props.view === "free" && !props.calibrating && (
         <div
           role="group"
           aria-label="자유 카메라 이동"
           style={{
             position: "absolute",
             right: 16,
-            top: 16,
+            top: 54,
             background: "#fffffff0",
             borderRadius: 10,
             padding: 8,

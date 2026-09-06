@@ -61,3 +61,11 @@ Local-only application (loopback); links work on this running local server, not 
 
 - Removed the free-mode guard that incorrectly prevented artwork dragging. Camera controls remain disabled during an active artwork drag; blank-space dragging still controls the camera.
 - Browser verified free-mode movement from (u=1.2, v=1.5) to (u=2.04, v=1.76), with unchanged room framing and the observer following the artwork. Undo restored the original placement; orbit-mode dragging then moved it to (u=1.66, v=1.86). No browser errors; typecheck passes.
+
+
+## Keyboard focus and collapsible tools (2026-09-06)
+
+- Camera movement uses physical KeyboardEvent.code, including Korean IME key values, and listens at window scope in free mode. Inputs, editable content and dialogs retain their typing behavior. Keyup, window blur, hidden document and editable focus clear held movement appropriately; pointer release no longer clears held movement keys.
+- Browser checks cover all six WASD/E/Q keys with Korean key values and a focused toolbar button, including after an artwork drag. Camera motion is verified by comparing rendered scene pixels; typing into the height field leaves the camera still.
+- Left and right editor panels hide independently, expanding the canvas. Rotation/movement controls can be hidden and restored separately. Checked hide/show and retained scene rendering. Typecheck and production build pass (existing storage tracing warnings remain).
+- Reproduce keyboard and panel checks: `npx tsx tests/observer-flow.ts`, then `node tests/browser-camera-controls.mjs`. The test uses an isolated fixture and writes screenshots under ignored `work/camera-controls/`.

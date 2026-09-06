@@ -93,6 +93,8 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     sequence: number;
   }>();
   const [view, setView] = useState<"orbit" | "top" | "free">("orbit");
+  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
+  const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [showGuides, setShowGuides] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -569,7 +571,34 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
             {detail.gallery.name}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 7 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 7,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          {scene && (
+            <>
+              <button
+                className="btn ghost"
+                aria-controls="gallery-space-tools"
+                aria-expanded={leftPanelVisible}
+                onClick={() => setLeftPanelVisible((value) => !value)}
+              >
+                {leftPanelVisible ? "왼쪽 패널 숨기기" : "왼쪽 패널 보기"}
+              </button>
+              <button
+                className="btn ghost"
+                aria-controls="gallery-artwork-tools"
+                aria-expanded={rightPanelVisible}
+                onClick={() => setRightPanelVisible((value) => !value)}
+              >
+                {rightPanelVisible ? "오른쪽 패널 숨기기" : "오른쪽 패널 보기"}
+              </button>
+            </>
+          )}
           <button
             className="btn ghost hide-small"
             onClick={() => setView("free")}
@@ -650,15 +679,22 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           inert={saving}
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "minmax(190px,230px) minmax(360px,1fr) minmax(280px,340px)",
+            gridTemplateColumns: [
+              leftPanelVisible && "minmax(190px,230px)",
+              "minmax(0,1fr)",
+              rightPanelVisible && "minmax(280px,340px)",
+            ]
+              .filter(Boolean)
+              .join(" "),
             gap: 12,
             marginTop: 14,
           }}
         >
           <aside
+            id="gallery-space-tools"
             className="card"
             style={{
+              display: leftPanelVisible ? undefined : "none",
               padding: 14,
               alignSelf: "start",
               maxHeight: "calc(100vh - 160px)",
@@ -917,8 +953,9 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
             ) : null}
           </section>
           <aside
+            id="gallery-artwork-tools"
             style={{
-              display: "grid",
+              display: rightPanelVisible ? "grid" : "none",
               gap: 12,
               alignSelf: "start",
               maxHeight: "calc(100vh - 160px)",
