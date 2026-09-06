@@ -7,8 +7,14 @@ import {
   useThree,
   type ThreeEvent,
 } from "@react-three/fiber";
-import { Html, Line, OrbitControls } from "@react-three/drei";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, RotateCcw } from "lucide-react";
+import { Edges, Html, Line, OrbitControls } from "@react-three/drei";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  RotateCcw,
+} from "lucide-react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Artwork, Placement, Scene, Vec3, Wall } from "@gallery/shared";
@@ -107,6 +113,27 @@ function ArtworkMesh({
   onDown: (event: ThreeEvent<PointerEvent>) => void;
 }) {
   const texture = useArtworkTexture(artwork.imageUrl);
+  const woodTexture = useMemo(() => {
+    if (artwork.frameMaterial !== "wood") return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 512;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.fillStyle = "#bd8a56";
+    context.fillRect(0, 0, 128, 512);
+    for (let x = 0; x < 128; x++) {
+      context.strokeStyle = `rgba(87,47,20,${0.04 + (Math.sin(x * 13.7) + 1) * 0.09})`;
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.bezierCurveTo(x + 4, 160, x - 3, 360, x, 512);
+      context.stroke();
+    }
+    const result = new THREE.CanvasTexture(canvas);
+    result.colorSpace = THREE.SRGBColorSpace;
+    return result;
+  }, [artwork.frameMaterial]);
+  useEffect(() => () => woodTexture?.dispose(), [woodTexture]);
   const { width, height, depth } = artworkSize(artwork),
     normal = wallInwardNormal(wall, scene.floor.polygon);
   const point = wallPoint(wall, placement.u, placement.v),
@@ -132,14 +159,29 @@ function ArtworkMesh({
         rotation={[0, 0, (placement.rotation * direction * Math.PI) / 180]}
         onPointerDown={onDown}
       >
-        <mesh castShadow receiveShadow>
+        <mesh castShadow>
           <boxGeometry args={[width, height, depth]} />
           <meshStandardMaterial
-            color={selected ? "#264b40" : inset > 0 ? "#34312d" : "#f6f4ee"}
-            roughness={0.62}
+            key={inset > 0 ? (woodTexture?.uuid ?? "black-frame") : "no-frame"}
+            map={inset > 0 ? woodTexture : null}
+            color={
+              inset > 0 ? (woodTexture ? "#ffffff" : "#202020") : "#f6f4ee"
+            }
+            roughness={artwork.frameMaterial === "wood" ? 0.78 : 0.48}
           />
         </mesh>
-        <mesh position={[0, 0, depth / 2 + 0.001]}>
+        {(artwork.matWidthMm ?? 0) > 0 && (
+          <mesh position={[0, 0, depth / 2 + 0.001]}>
+            <planeGeometry
+              args={[
+                (artwork.widthMm + 2 * (artwork.matWidthMm ?? 0)) / 1000,
+                (artwork.heightMm + 2 * (artwork.matWidthMm ?? 0)) / 1000,
+              ]}
+            />
+            <meshStandardMaterial color="#faf8f2" roughness={0.95} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+          </mesh>
+        )}
+        <mesh position={[0, 0, depth / 2 + 0.002]}>
           <planeGeometry
             args={[artwork.widthMm / 1000, artwork.heightMm / 1000]}
           />
@@ -149,6 +191,9 @@ function ArtworkMesh({
             color={texture ? "#ffffff" : "#e5e1d8"}
             roughness={0.9}
             side={THREE.DoubleSide}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
         {selected && (
@@ -210,10 +255,22 @@ function CameraRig({
   const { camera, gl, size } = useThree();
   const controls = useRef<OrbitControlsImpl>(null);
   const handledCommand = useRef(0);
+  const fittedLayout = useRef("");
   const keys = useRef(new Set<string>());
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
+    const layout = JSON.stringify([
+      scene.id,
+      view,
+      bounds,
+      scene.floor.polygon,
+      size.width,
+      size.height,
+    ]);
+    // Saving only artwork settings must not move the camera back to its initial angle.
+    if (layout === fittedLayout.current) return;
+    fittedLayout.current = layout;
     const center = new THREE.Vector3(
       (bounds.minX + bounds.maxX) / 2,
       bounds.minY,
@@ -282,7 +339,15 @@ function CameraRig({
     camera.updateProjectionMatrix();
     c.update();
     c.saveState();
-  }, [camera, view, bounds, scene.floor.polygon, size.width, size.height]);
+  }, [
+    camera,
+    view,
+    bounds,
+    scene.id,
+    scene.floor.polygon,
+    size.width,
+    size.height,
+  ]);
   useEffect(() => {
     const c = controls.current;
     if (!c || !command || handledCommand.current === command.sequence) return;
@@ -296,8 +361,7 @@ function CameraRig({
       c.update();
       c.reset();
       c.enableDamping = damping;
-    }
-    else if (command.action === "left" || command.action === "right")
+    } else if (command.action === "left" || command.action === "right")
       c.setAzimuthalAngle(
         c.getAzimuthalAngle() + (command.action === "left" ? -step : step),
       );
@@ -462,10 +526,15 @@ function WallMesh({
         />
         <meshStandardMaterial
           ref={material}
-          color={selected ? "#d7e5de" : "#f5f3ed"}
+          color={selected ? "#b9cdee" : "#f5f3ed"}
           roughness={0.88}
           transparent
           side={THREE.DoubleSide}
+        />
+        <Edges
+          color={selected ? "#5275a8" : "#96988f"}
+          transparent
+          opacity={selected ? 0.75 : 0.22}
         />
       </mesh>
       <mesh
@@ -644,7 +713,9 @@ function SparseCloud({
   );
 }
 
-function GalleryScene(props: SceneCanvasProps & { command: CameraCommand | null }) {
+function GalleryScene(
+  props: SceneCanvasProps & { command: CameraCommand | null },
+) {
   const {
     scene,
     artworks,
@@ -801,11 +872,11 @@ function GalleryScene(props: SceneCanvasProps & { command: CameraCommand | null 
   return (
     <>
       <color attach="background" args={["#e9e9e2"]} />
-      <ambientLight intensity={1.1} />
-      <hemisphereLight args={["#fffdf5", "#b8b6ad", 1.3]} />
+      <ambientLight intensity={0.7} />
+      <hemisphereLight args={["#fffdf5", "#b8b6ad", 0.8]} />
       <directionalLight
         position={[4, 10, 3]}
-        intensity={2.1}
+        intensity={1.6}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0003}
@@ -890,8 +961,12 @@ function GalleryScene(props: SceneCanvasProps & { command: CameraCommand | null 
 export default function SceneCanvas(props: SceneCanvasProps) {
   const [command, setCommand] = useState<CameraCommand | null>(null);
   const rotate = (action: CameraAction) => {
-    if (props.view === "top" && action !== "reset") props.onViewChange?.("orbit");
-    setCommand((previous) => ({ sequence: (previous?.sequence ?? 0) + 1, action }));
+    if (props.view === "top" && action !== "reset")
+      props.onViewChange?.("orbit");
+    setCommand((previous) => ({
+      sequence: (previous?.sequence ?? 0) + 1,
+      action,
+    }));
   };
   return (
     <div
@@ -930,13 +1005,15 @@ export default function SceneCanvas(props: SceneCanvasProps) {
       {props.view !== "walk" && !props.calibrating && (
         <div className="scene-rotation" role="group" aria-label="도면 회전">
           <span className="scene-rotation-label">도면 회전</span>
-          {([
-            ["up", "위로 회전", ArrowUp],
-            ["left", "왼쪽으로 회전", ArrowLeft],
-            ["reset", "처음 시점으로", RotateCcw],
-            ["right", "오른쪽으로 회전", ArrowRight],
-            ["down", "아래로 회전", ArrowDown],
-          ] as const).map(([action, label, Icon]) => (
+          {(
+            [
+              ["up", "위로 회전", ArrowUp],
+              ["left", "왼쪽으로 회전", ArrowLeft],
+              ["reset", "처음 시점으로", RotateCcw],
+              ["right", "오른쪽으로 회전", ArrowRight],
+              ["down", "아래로 회전", ArrowDown],
+            ] as const
+          ).map(([action, label, Icon]) => (
             <button
               key={action}
               type="button"

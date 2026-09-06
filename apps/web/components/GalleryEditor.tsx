@@ -46,6 +46,7 @@ import type {
 } from "@gallery/shared";
 import {
   alignPlacements,
+  validatePlacement,
   calibrateScene,
   clampPlacement,
   findCollisions,
@@ -55,8 +56,15 @@ import {
 import { api, ApiError, jobLabel } from "@/lib/api";
 import { AppBrand } from "./AppBrand";
 import { SceneStage } from "./SceneStage";
+import { ArtworkFramePanel, type FramePatch } from "./ArtworkFramePanel";
 
-type Snapshot = { scene: Scene; placements: Placement[]; revision: number };
+type FrameStyles = Record<string, Partial<FramePatch>>;
+type Snapshot = {
+  scene: Scene;
+  placements: Placement[];
+  revision: number;
+  frameStyles: FrameStyles;
+};
 const num = (value: string, fallback = 0) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 const m = (value: number) => `${value.toFixed(2)} m`;
@@ -65,6 +73,15 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
   const [detail, setDetail] = useState<GalleryDetail | null>(null);
   const [workingScene, setWorkingScene] = useState<Scene | null>(null);
   const [placements, setPlacements] = useState<Placement[]>([]);
+  const [frameStyles, setFrameStyles] = useState<FrameStyles>({});
+  const artworks = useMemo(
+    () =>
+      (detail?.artworks ?? []).map((art) => ({
+        ...art,
+        ...frameStyles[art.id],
+      })),
+    [detail?.artworks, frameStyles],
+  );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedWallId, setSelectedWallId] = useState<string | undefined>();
   const [selectedArtworkId, setSelectedArtworkId] = useState<
@@ -76,7 +93,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [artOpen, setArtOpen] = useState(false);
-  const [wallOpen, setWallOpen] = useState(true);
+  const [wallOpen, setWallOpen] = useState(false);
   const [calibration, setCalibration] = useState(false);
   const [points, setPoints] = useState<Vec3[]>([]);
   const [distance, setDistance] = useState("1");
@@ -91,6 +108,12 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       setDetail(data);
       setWorkingScene(data.scene);
       setPlacements(data.exhibition.placements);
+      setFrameStyles({});
+      setSelectedArtworkId((current) =>
+        data.artworks.some((art) => art.id === current)
+          ? current
+          : data.artworks[0]?.id,
+      );
       setSelectedWallId((current) =>
         current && data.scene?.walls.some((w) => w.id === current)
           ? current
@@ -129,12 +152,17 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
             scene: workingScene,
             placements,
             revision: detail.exhibition.revision,
+            frameStyles,
           }
         : null,
-    [workingScene, placements, detail],
+    [workingScene, placements, detail, frameStyles],
   );
   const commit = useCallback(
-    (nextScene: Scene, nextPlacements: Placement[]) => {
+    (
+      nextScene: Scene,
+      nextPlacements: Placement[],
+      nextStyles = frameStyles,
+    ) => {
       const current = snapshot();
       if (current) {
         setHistory((items) => [...items.slice(-39), current]);
@@ -142,22 +170,23 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       }
       setWorkingScene(nextScene);
       setPlacements(nextPlacements);
+      setFrameStyles(nextStyles);
     },
-    [snapshot],
+    [snapshot, frameStyles],
   );
   const selectedWall = workingScene?.walls.find((w) => w.id === selectedWallId);
   const selectedPlacement = placements.find(
     (p) => selectedIds.length === 1 && p.id === selectedIds[0],
   );
-  const selectedArt = detail?.artworks.find(
+  const selectedArt = artworks.find(
     (a) => a.id === selectedPlacement?.artworkId,
   );
   const collisions = useMemo(
     () =>
       workingScene && detail
-        ? findCollisions(placements, detail.artworks, workingScene.walls)
+        ? findCollisions(placements, artworks, workingScene.walls)
         : [],
-    [workingScene, detail, placements],
+    [workingScene, detail, placements, artworks],
   );
   function undo() {
     const previous = history.at(-1);
@@ -167,6 +196,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     setFuture((items) => [current, ...items]);
     setWorkingScene(previous.scene);
     setPlacements(previous.placements);
+    setFrameStyles(previous.frameStyles);
   }
   function redo() {
     const next = future[0];
@@ -176,11 +206,12 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     setHistory((items) => [...items, current]);
     setWorkingScene(next.scene);
     setPlacements(next.placements);
+    setFrameStyles(next.frameStyles);
   }
   function applyPlacement(next: Placement) {
     if (!workingScene || !detail) return;
     const wall = workingScene.walls.find((w) => w.id === next.wallId),
-      art = detail.artworks.find((a) => a.id === next.artworkId);
+      art = artworks.find((a) => a.id === next.artworkId);
     if (!wall || !art) return;
     commit(
       workingScene,
@@ -194,7 +225,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     const wall =
       workingScene.walls.find((w) => w.id === selectedWallId) ||
       workingScene.walls[0];
-    const art = detail.artworks.find((a) => a.id === artworkId);
+    const art = artworks.find((a) => a.id === artworkId);
     if (!wall || !art) {
       setError("먼저 벽과 작품을 선택해 주세요.");
       return;
@@ -216,6 +247,36 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       "작품을 벽 중앙에 추가했습니다. 캔버스에서 드래그하거나 수치를 입력해 배치하세요.",
     );
   }
+  const frameArt =
+    selectedArt ?? artworks.find((art) => art.id === selectedArtworkId);
+  function updateFrame(patch: Partial<FramePatch>) {
+    if (!workingScene || !frameArt) return;
+    if (
+      Object.entries(patch).every(
+        ([key, value]) => frameArt[key as keyof FramePatch] === value,
+      )
+    )
+      return;
+    const updated = { ...frameArt, ...patch };
+    const nextPlacements = placements.map((p) => {
+      const wall = workingScene.walls.find((w) => w.id === p.wallId);
+      return p.artworkId === updated.id && wall && !p.locked
+        ? clampPlacement(p, updated, wall)
+        : p;
+    });
+    commit(workingScene, nextPlacements, {
+      ...frameStyles,
+      [updated.id]: { ...frameStyles[updated.id], ...patch },
+    });
+    setError("");
+  }
+  const invalidPlacements = workingScene
+    ? placements.filter((p) => {
+        const wall = workingScene.walls.find((w) => w.id === p.wallId);
+        const art = artworks.find((a) => a.id === p.artworkId);
+        return !wall || !art || validatePlacement(p, art, wall).length > 0;
+      })
+    : [];
   function updateWall(patch: Partial<Wall>) {
     if (!workingScene || !selectedWall) return;
     commit(
@@ -314,7 +375,13 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     }
   }
   async function save() {
-    if (!workingScene || !detail) return;
+    if (!workingScene || !detail || saving) return;
+    if (invalidPlacements.length || collisions.length) {
+      setError(
+        "액자가 벽을 벗어나거나 서로 겹칩니다. 위치 또는 여백을 조정해 주세요.",
+      );
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -324,12 +391,21 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           scene: workingScene,
           placements,
           expectedRevision: detail.exhibition.revision,
+          artworkStyles: artworks
+            .filter((art) => frameStyles[art.id])
+            .map((art) => ({
+              id: art.id,
+              frameMaterial: art.frameMaterial ?? "black",
+              frameWidthMm: art.frameWidthMm,
+              frameDepthMm: art.frameDepthMm,
+              matWidthMm: art.matWidthMm ?? 0,
+            })),
         }),
       });
       await reload();
       setHistory([]);
       setFuture([]);
-      setMessage("공간과 전시 배치를 저장했습니다.");
+      setMessage("배치와 액자·여백 설정을 저장했습니다.");
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError(
@@ -387,6 +463,10 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           imageUrl: assets[0].url,
           widthMm,
           heightMm,
+          frameMaterial: "black",
+          frameWidthMm: 20,
+          frameDepthMm: 25,
+          matWidthMm: 0,
         }),
       });
       setDetail((current) =>
@@ -402,6 +482,35 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       );
     }
   }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || saving) return;
+      const key = event.key.toLowerCase();
+      if (key === "s") {
+        event.preventDefault();
+        void save();
+      }
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input,textarea,select,[contenteditable=true]"))
+        return;
+      if (key === "z") {
+        event.preventDefault();
+        event.shiftKey ? redo() : undo();
+      }
+    };
+    const onUnload = (event: BeforeUnloadEvent) => {
+      if (history.length) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("beforeunload", onUnload);
+    };
+  }, [save, undo, redo, saving, history.length]);
   if (loading)
     return (
       <main className="shell">
@@ -457,9 +566,21 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           >
             <Eye size={15} /> 미리보기
           </button>
+          <span className="save-state" role="status">
+            {saving
+              ? "저장 중…"
+              : history.length
+                ? "저장하지 않은 변경"
+                : "저장됨"}
+          </span>
           <button
             className="btn primary"
-            disabled={!scene || saving}
+            disabled={
+              !scene ||
+              saving ||
+              invalidPlacements.length > 0 ||
+              collisions.length > 0
+            }
             onClick={() => void save()}
           >
             {saving ? <LoaderCircle size={15} /> : <Save size={15} />} 저장
@@ -484,6 +605,29 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           {message}
         </p>
       ) : null}
+      {scene && (
+        <div className="editor-workflow">
+          <span>
+            <b>1</b> 작품 선택
+          </span>
+          <span>
+            <b>2</b> 액자·여백 설정
+          </span>
+          <span>
+            <b>3</b> 벽에 배치 후 저장
+          </span>
+          <span className="workflow-tip">
+            벽을 클릭하면 배치할 벽이 선택됩니다
+          </span>
+        </div>
+      )}
+      {invalidPlacements.length > 0 || collisions.length > 0 ? (
+        <p className="notice" role="alert">
+          {invalidPlacements.length
+            ? "액자 전체 크기가 벽을 벗어납니다. 여백을 줄이거나 더 큰 벽으로 옮겨 주세요."
+            : "액자끼리 겹칩니다. 위치를 조정한 후 저장해 주세요."}
+        </p>
+      ) : null}
       {!scene ? (
         <ReconstructionPanel
           detail={detail}
@@ -492,10 +636,12 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
         />
       ) : (
         <div
+          className="editor-layout"
+          inert={saving}
           style={{
             display: "grid",
             gridTemplateColumns:
-              "minmax(220px,280px) minmax(420px,1fr) minmax(250px,330px)",
+              "minmax(190px,230px) minmax(360px,1fr) minmax(280px,340px)",
             gap: 12,
             marginTop: 14,
           }}
@@ -505,7 +651,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
             style={{
               padding: 14,
               alignSelf: "start",
-              maxHeight: "calc(100vh - 102px)",
+              maxHeight: "calc(100vh - 160px)",
               overflow: "auto",
             }}
           >
@@ -564,7 +710,50 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                 <p key={i}>{warning}</p>
               ))}
             </details>
-            <CapturePanel galleryName={detail.gallery.name} />
+            <details className="advanced-capture">
+              <summary>현장 사진·영상 다시 가져오기</summary>
+              <CapturePanel galleryName={detail.gallery.name} />
+            </details>
+            <hr
+              style={{
+                border: 0,
+                borderTop: "1px solid var(--line)",
+                margin: "17px 0",
+              }}
+            />
+            <p className="eyebrow">뷰</p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3,1fr)",
+                gap: 4,
+                marginTop: 7,
+              }}
+            >
+              {(["orbit", "top", "walk"] as const).map((v) => (
+                <button
+                  key={v}
+                  className="btn ghost"
+                  style={{
+                    padding: 0,
+                    fontSize: 11,
+                    background: view === v ? "var(--ink)" : "transparent",
+                    color: view === v ? "white" : "var(--ink)",
+                  }}
+                  onClick={() => setView(v)}
+                >
+                  {v === "orbit" ? "둘러보기" : v === "top" ? "평면" : "보행"}
+                </button>
+              ))}
+            </div>
+            <button
+              className="btn ghost"
+              style={{ marginTop: 8, width: "100%" }}
+              onClick={() => setShowGuides((x) => !x)}
+            >
+              <Grid2X2 size={14} />
+              {showGuides ? "가이드 숨기기" : "가이드 보기"}
+            </button>
             <button
               className="btn ghost"
               style={{ width: "100%", justifyContent: "space-between" }}
@@ -622,51 +811,11 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                 ) : null}
               </div>
             ) : null}
-            <hr
-              style={{
-                border: 0,
-                borderTop: "1px solid var(--line)",
-                margin: "17px 0",
-              }}
-            />
-            <p className="eyebrow">뷰</p>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3,1fr)",
-                gap: 4,
-                marginTop: 7,
-              }}
-            >
-              {(["orbit", "top", "walk"] as const).map((v) => (
-                <button
-                  key={v}
-                  className="btn ghost"
-                  style={{
-                    padding: 0,
-                    fontSize: 11,
-                    background: view === v ? "var(--ink)" : "transparent",
-                    color: view === v ? "white" : "var(--ink)",
-                  }}
-                  onClick={() => setView(v)}
-                >
-                  {v === "orbit" ? "둘러보기" : v === "top" ? "평면" : "보행"}
-                </button>
-              ))}
-            </div>
-            <button
-              className="btn ghost"
-              style={{ marginTop: 8, width: "100%" }}
-              onClick={() => setShowGuides((x) => !x)}
-            >
-              <Grid2X2 size={14} />
-              {showGuides ? "가이드 숨기기" : "가이드 보기"}
-            </button>
           </aside>
           <section
             className="card"
             style={{
-              height: "calc(100vh - 102px)",
+              height: "calc(100vh - 160px)",
               minHeight: 340,
               position: "relative",
               overflow: "hidden",
@@ -675,10 +824,14 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           >
             <SceneStage
               scene={scene}
-              artworks={detail.artworks}
+              artworks={artworks}
               placements={placements}
               selectedIds={selectedIds}
-              onSelect={(ids) => setSelectedIds(ids)}
+              onSelect={(ids) => {
+                setSelectedIds(ids);
+                const selected = placements.find((p) => p.id === ids[0]);
+                if (selected) setSelectedArtworkId(selected.artworkId);
+              }}
               onMove={(id, wallId, u, v) => {
                 const p = placements.find((x) => x.id === id);
                 if (p) applyPlacement({ ...p, wallId, u, v });
@@ -753,22 +906,42 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
               display: "grid",
               gap: 12,
               alignSelf: "start",
-              maxHeight: "calc(100vh - 102px)",
+              maxHeight: "calc(100vh - 160px)",
               overflow: "auto",
             }}
           >
             <section className="card" style={{ padding: 14 }}>
-              <p className="eyebrow">작품</p>
+              <p className="eyebrow">1 · 작품 선택</p>
               <ArtworkShelf
-                artworks={detail.artworks}
+                artworks={artworks}
                 selected={selectedArtworkId}
-                onSelect={setSelectedArtworkId}
+                onSelect={(id) => {
+                  setSelectedArtworkId(id);
+                  const placed = placements.find((p) => p.artworkId === id);
+                  setSelectedIds(placed ? [placed.id] : []);
+                  if (placed) setSelectedWallId(placed.wallId);
+                }}
+                wallName={selectedWall?.name}
                 onAdd={addArtwork}
                 onUpload={uploadArt}
               />
             </section>
+            {frameArt ? (
+              <ArtworkFramePanel artwork={frameArt} onChange={updateFrame} />
+            ) : (
+              <section className="card frame-panel">
+                <p className="muted">
+                  작품을 올리면 우드·블랙 액자와 여백을 미리 볼 수 있습니다.
+                </p>
+              </section>
+            )}
             {selectedWall ? (
-              <section className="card" style={{ padding: 14 }}>
+              <details className="card" style={{ padding: 14 }}>
+                <summary
+                  style={{ cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                >
+                  벽 치수 수정 · {selectedWall.name}
+                </summary>
                 <p className="eyebrow">선택한 벽</p>
                 <p style={{ fontWeight: 700, margin: "6px 0 12px" }}>
                   {selectedWall.name}{" "}
@@ -827,7 +1000,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                     }
                   />
                 </div>
-              </section>
+              </details>
             ) : null}
             <PlacementPanel
               placement={selectedPlacement}
@@ -843,7 +1016,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
               }}
               onDuplicate={() => {
                 if (!selectedPlacement || !scene) return;
-                const art = detail.artworks.find(
+                const art = artworks.find(
                     (a) => a.id === selectedPlacement.artworkId,
                   ),
                   wall = scene.walls.find(
@@ -899,7 +1072,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                         selectedIds,
                         "center",
                         undefined,
-                        detail.artworks,
+                        artworks,
                       ),
                     )
                   }
@@ -918,7 +1091,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                         selectedIds,
                         "height",
                         undefined,
-                        detail.artworks,
+                        artworks,
                       ),
                     )
                   }
@@ -938,7 +1111,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                         selectedIds,
                         "spacing",
                         undefined,
-                        detail.artworks,
+                        artworks,
                       ),
                     )
                   }
@@ -1132,8 +1305,10 @@ function ArtworkShelf({
   onSelect,
   onAdd,
   onUpload,
+  wallName,
 }: {
   artworks: Artwork[];
+  wallName?: string;
   selected?: string;
   onSelect: (id: string) => void;
   onAdd: (id: string) => void;
@@ -1168,6 +1343,9 @@ function ArtworkShelf({
   }
   return (
     <>
+      <p className="shelf-target">
+        배치할 벽: <strong>{wallName ?? "도면에서 벽을 선택하세요"}</strong>
+      </p>
       <div style={{ display: "grid", gap: 5, margin: "8px 0" }}>
         {artworks.map((art) => (
           <div
@@ -1184,8 +1362,13 @@ function ArtworkShelf({
               padding: 3,
             }}
           >
-            <div
+            <button
+              type="button"
+              onClick={() => onSelect(art.id)}
+              aria-label={`${art.title} 선택`}
               style={{
+                border: 0,
+                padding: 0,
                 width: 36,
                 height: 36,
                 background: "#e5ded1",
@@ -1199,7 +1382,7 @@ function ArtworkShelf({
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
               ) : null}
-            </div>
+            </button>
             <button
               onClick={() => onSelect(art.id)}
               style={{
@@ -1225,9 +1408,10 @@ function ArtworkShelf({
               className="btn ghost"
               style={{ padding: "0 7px", minHeight: 30 }}
               onClick={() => onAdd(art.id)}
-              title="선택한 벽에 추가"
+              title={wallName ? `${wallName}에 배치` : "먼저 벽을 선택하세요"}
+              disabled={!wallName}
             >
-              <Plus size={15} />
+              <Plus size={15} /> 배치
             </button>
           </div>
         ))}

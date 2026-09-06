@@ -27,3 +27,11 @@
 
 ## Known scope limits
 Local-only application (loopback); links work on this running local server, not publicly hosted. No GPU/GS training or photorealistic twin claim. Sparse camera-up is estimated; no automatic wall/floor detection. General floorplan OCR/CAD and 360 geometry not implemented. Initial one exhibition per gallery, immutable shares; multiple saved exhibition versions deferred. Video artworks deferred to Phase2 (uploads restricted to images). S3/deployed PostgreSQL/hosted identity remain extension interfaces/design, no production adapter verification. Floorplan wall thickness and entrance details need on-site checking.
+
+## Frame and usability update
+- Added wood/black/no-frame preview, adjustable frame width and four-sided white mat, with external dimensions. Three.js and front preview use the same measurements.
+- Saved styles share the scene/placement transaction and exhibition revision; new tests cover material/mat defaults, persistence, invalid/foreign inputs, stale revisions, frame/mat collision and boundary rollback, and immutable guest snapshot data.
+- Geometry regression covers mat-inclusive collision and boundary behavior. Existing API workflow remains passing.
+- Browser confirmed live wood rendering, 50mm mat, undo to 30mm, redo, and keyboard save in a separate test gallery.
+- Editor now shows a three-step workflow, selected wall, visible view controls, explicit placement buttons and save state. Wall geometry and recapture controls are collapsed. Save preserves the camera angle when geometry is unchanged.
+- Final typecheck, 10 geometry tests, existing live API workflow, dedicated frame API workflow and production build passed. A 390px editor viewport has a 390px document with no horizontal overflow. Wood and black render in both the front preview and the shared Three.js renderer; removed frame self-shadow artifacts.

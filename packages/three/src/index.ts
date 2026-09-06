@@ -37,8 +37,14 @@ export function artworkSize(artwork: Artwork): {
   depth: number;
 } {
   return {
-    width: (artwork.widthMm + 2 * artwork.frameWidthMm) / 1000,
-    height: (artwork.heightMm + 2 * artwork.frameWidthMm) / 1000,
+    width:
+      (artwork.widthMm +
+        2 * (artwork.frameWidthMm + (artwork.matWidthMm ?? 0))) /
+      1000,
+    height:
+      (artwork.heightMm +
+        2 * (artwork.frameWidthMm + (artwork.matWidthMm ?? 0))) /
+      1000,
     depth: Math.max(artwork.depthMm, artwork.frameDepthMm, 1) / 1000,
   };
 }
@@ -88,6 +94,7 @@ export function validatePlacement(
     artwork.widthMm <= 0 ||
     artwork.heightMm <= 0 ||
     artwork.frameWidthMm < 0 ||
+    (artwork.matWidthMm ?? 0) < 0 ||
     artwork.depthMm < 0 ||
     artwork.frameDepthMm < 0
   )

@@ -12,6 +12,15 @@ Gallery Twin은 전시 공간을 직접 계측하고, 작품을 실제 벽에 �
 - sparse point cloud는 photorealistic mesh 또는 Gaussian splat이 아닙니다. GPU 실행, 자동 벽 추정, 임의의 단일 이미지 방 추정은 이 저장소에서 주장하지 않습니다.
 - 데이터베이스와 원본 업로드는 로컬 디스크에 보관합니다. 배포, 다중 사용자 인증, 외부 GPU 작업, 외부 원본 업로드는 구성되어 있지 않습니다.
 
+## 작품 배치와 액자 설정
+
+1. 오른쪽 목록에서 작품을 선택합니다. 썸네일을 눌러도 선택됩니다.
+2. **액자·여백**에서 우드·블랙·없음을 고르고, 프레임 폭과 흰 여백을 mm로 조절합니다. 정면 미리보기와 3D 공간에 즉시 반영됩니다.
+3. 도면에서 벽을 선택한 뒤 작품 옆 **배치**를 누릅니다. 작품을 드래그하거나 중심 위치를 입력합니다.
+4. 상단 **저장** 또는 Ctrl/Cmd+S로 배치와 액자 설정을 함께 저장합니다. Ctrl/Cmd+Z로 되돌리고 Shift를 더하면 다시 실행합니다.
+
+여백은 작품 바깥 사방에 추가되며, 전체 크기는 `작품 크기 + 2 × (여백 + 프레임 폭)`입니다. 같은 작품의 모든 배치에 같은 액자 설정이 적용됩니다. 프레임·여백을 포함한 벽 경계와 겹침 검사에 통과해야 저장됩니다. 이미 만든 공유 링크는 생성 당시 설정을 유지하므로 변경 후에는 새 링크를 만드세요.
+
 ## 로컬 요구 사항
 
 Node 26 및 npm 11을 기준으로 확인합니다. Node 버전 관리자를 쓰는 경우 먼저 해당 버전을 활성화하세요. `video`/`photos` CPU 경로를 시험하려면 Python, FFmpeg, OpenCV와 pycolmap이 추가로 필요할 수 있습니다. pycolmap이나 COLMAP이 없는 호스트에서는 그 경로가 성공한 것처럼 처리되지 않고 명시적인 의존성 오류로 끝나야 합니다.
@@ -58,6 +67,8 @@ seed는 평면도를 `reference`로 업로드하고 measured-plan job을 enqueue
 npm run typecheck
 npm test
 npx tsx tests/image-normalization.ts
+# 실행 중인 로컬 서버에서 액자 저장·공유·충돌 검증 (별도 검증 갤러리 생성)
+npx tsx tests/frame-flow.ts
 services/reconstruction/.venv/bin/python -m unittest discover -s services/reconstruction -p 'test*.py'
 npm run build
 ```

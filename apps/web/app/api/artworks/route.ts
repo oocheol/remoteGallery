@@ -59,7 +59,30 @@ export async function POST(request: NextRequest) {
       depthMm: numeric(body.depthMm, "depthMm", false),
       frameWidthMm: numeric(body.frameWidthMm, "frameWidthMm", false),
       frameDepthMm: numeric(body.frameDepthMm, "frameDepthMm", false),
+      frameMaterial:
+        body.frameMaterial === undefined
+          ? "black"
+          : (body.frameMaterial as Artwork["frameMaterial"]),
+      matWidthMm: numeric(body.matWidthMm, "matWidthMm", false),
     };
+    if (!["wood", "black"].includes(artwork.frameMaterial!))
+      throw new ApiError(
+        400,
+        "INVALID_ARTWORK_STYLE",
+        "프레임은 우드 또는 블랙을 선택하세요.",
+      );
+    if (
+      [
+        artwork.frameWidthMm,
+        artwork.frameDepthMm,
+        artwork.matWidthMm ?? 0,
+      ].some((value) => value > 1000)
+    )
+      throw new ApiError(
+        400,
+        "INVALID_ARTWORK_STYLE",
+        "프레임과 여백은 0–1000mm 범위로 입력하세요.",
+      );
     return NextResponse.json(await createArtwork(artwork), { status: 201 });
   } catch (error) {
     return apiError(error);

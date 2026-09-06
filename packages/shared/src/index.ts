@@ -54,6 +54,9 @@ export type Artwork = {
   depthMm: number;
   frameWidthMm: number;
   frameDepthMm: number;
+  frameMaterial?: "wood" | "black";
+  /** White mat surrounding the image, on each side, before the frame. */
+  matWidthMm?: number;
 };
 
 export type Placement = {
@@ -190,7 +193,19 @@ export const artworkSchema = z.object({
   depthMm: z.number(),
   frameWidthMm: z.number(),
   frameDepthMm: z.number(),
+  frameMaterial: z.enum(["wood", "black"]).default("black"),
+  matWidthMm: z.number().min(0).max(1000).default(0),
 });
+
+export const artworkStyleSchema = z
+  .object({
+    id: z.string(),
+    frameMaterial: z.enum(["wood", "black"]),
+    frameWidthMm: z.number().min(0).max(1000),
+    frameDepthMm: z.number().min(0).max(1000),
+    matWidthMm: z.number().min(0).max(1000),
+  })
+  .strict();
 
 export const placementSchema = z.object({
   id: z.string(),

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getDatabase, withTransaction, type SqlDatabase } from '@gallery/db';
 import type { Asset, Artwork, Exhibition, Gallery, GalleryDetail, Job, JobStatus, Placement, Scene } from '@gallery/shared';
-import { sceneSchema } from '@gallery/shared';
+import { sceneSchema, artworkStyleSchema } from '@gallery/shared';
 import { findCollisions, validatePlacement } from '@gallery/three';
 import { ApiError } from './http';
 
@@ -133,7 +133,7 @@ export function validatePlacements(placements: unknown, scene: Scene, artworks: 
   return normalized;
 }
 
-export async function updateScene(galleryId: string, input: { scene: unknown; placements?: unknown; expectedRevision?: unknown }) {
+export async function updateScene(galleryId: string, input: { scene: unknown; placements?: unknown; expectedRevision?: unknown; artworkStyles?: unknown }) {
   const parsedScene = validateScene(input.scene, galleryId);
   return withTransaction(async db => {
     const priorSceneResult = await db.query<{ scene: unknown }>('SELECT scene FROM scenes WHERE gallery_id=$1', [galleryId]);
@@ -145,13 +145,29 @@ export async function updateScene(galleryId: string, input: { scene: unknown; pl
     const exhibitionResult = await db.query<{ id: string; revision: number }>('SELECT id,revision FROM exhibitions WHERE gallery_id=$1', [galleryId]);
     const exhibition = exhibitionResult.rows[0]; if (!exhibition) throw new ApiError(404, 'GALLERY_NOT_FOUND', 'Gallery not found');
     if (input.expectedRevision !== undefined && (!Number.isInteger(input.expectedRevision) || input.expectedRevision !== exhibition.revision)) throw new ApiError(409, 'REVISION_CONFLICT', 'This exhibition was updated elsewhere');
-    const artworks = artResult.rows.map(row => json<Artwork>(row.artwork));
+    let artworks = artResult.rows.map(row => json<Artwork>(row.artwork));
+    const changedArtworks: Artwork[] = [];
+    if (input.artworkStyles !== undefined) {
+      if (input.expectedRevision === undefined) throw new ApiError(400, 'REVISION_REQUIRED', 'Frame changes require an exhibition revision');
+      const parsed = artworkStyleSchema.array().max(1000).safeParse(input.artworkStyles);
+      if (!parsed.success) throw new ApiError(400, 'INVALID_ARTWORK_STYLE', '액자 또는 여백 값이 올바르지 않습니다.');
+      const ids = new Set<string>();
+      for (const style of parsed.data) {
+        const prior = artworks.find(art => art.id === style.id);
+        if (!prior || ids.has(style.id)) throw new ApiError(400, 'INVALID_ARTWORK_STYLE', '작품이 이 갤러리에 속하지 않거나 중복되었습니다.');
+        ids.add(style.id);
+        const next = { ...prior, ...style };
+        artworks = artworks.map(art => art.id === next.id ? next : art);
+        changedArtworks.push(next);
+      }
+    }
     const existing = await db.query<{ placements: unknown }>('SELECT placements FROM exhibitions WHERE id=$1', [exhibition.id]);
     // Scene changes are rejected when already-saved artwork could become invalid.
     const placements = input.placements === undefined ? validatePlacements(json<Placement[]>(existing.rows[0].placements), parsedScene, artworks) : validatePlacements(input.placements, parsedScene, artworks);
     const timestamp = now();
+    for (const art of changedArtworks) await db.query('UPDATE artworks SET artwork=$1 WHERE id=$2 AND gallery_id=$3', [JSON.stringify(art), art.id, galleryId]);
     await db.query('INSERT INTO scenes(gallery_id,scene,updated_at) VALUES($1,$2,$3) ON CONFLICT(gallery_id) DO UPDATE SET scene=EXCLUDED.scene, updated_at=EXCLUDED.updated_at', [galleryId, JSON.stringify(parsedScene), timestamp]);
-    if (input.placements !== undefined) await db.query('UPDATE exhibitions SET placements=$1, revision=revision+1, updated_at=$2 WHERE id=$3', [JSON.stringify(placements), timestamp, exhibition.id]);
+    if (input.placements !== undefined || changedArtworks.length) await db.query('UPDATE exhibitions SET placements=$1, revision=revision+1, updated_at=$2 WHERE id=$3', [JSON.stringify(placements), timestamp, exhibition.id]);
     await db.query('UPDATE galleries SET updated_at=$1 WHERE id=$2', [timestamp, galleryId]);
     return parsedScene;
   });

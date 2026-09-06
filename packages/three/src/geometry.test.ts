@@ -96,6 +96,24 @@ describe("wall coordinates", () => {
   });
 });
 describe("physical bounds and calibration", () => {
+  it("includes mat outside the image in boundaries and collision checks", () => {
+    const matted = { ...art, matWidthMm: 50, frameMaterial: "wood" as const };
+    expect(artworkSize(matted)).toEqual({
+      width: 0.75,
+      height: 0.55,
+      depth: 0.035,
+    });
+    expect(validatePlacement({ ...placement, u: 0.34 }, art, wall)).toEqual([]);
+    expect(
+      validatePlacement({ ...placement, u: 0.34 }, matted, wall),
+    ).toContain("Artwork frame exceeds wall width");
+    const pair = [placement, { ...placement, id: "p2", u: placement.u + 0.7 }];
+    expect(findCollisions(pair, [art], [wall])).toHaveLength(0);
+    expect(findCollisions(pair, [matted], [wall])).toHaveLength(1);
+    expect(artworkSize({ ...matted, frameMaterial: "black" })).toEqual(
+      artworkSize(matted),
+    );
+  });
   it("includes the full frame, clamps center, and rejects oversized work", () => {
     expect(artworkSize(art)).toEqual({
       width: 0.65,
