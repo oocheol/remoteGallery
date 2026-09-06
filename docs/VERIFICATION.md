@@ -55,3 +55,9 @@ Local-only application (loopback); links work on this running local server, not 
 - `npx tsx tests/observer-flow.ts` passes isolated-gallery save/reload, height limits, duplicate/dangling reference validation, revision conflicts, immutable shares and observer cleanup after placement deletion.
 - Free mode replaces walking: preserves the current overview on entry, allows full camera-forward/sideways/vertical movement outside floor and wall boundaries, and offers mouse and on-screen controls. Orbit double-click still enters at the picked eye-level destination.
 - Typecheck and production build pass; the build retains the existing two dynamic-storage-path tracing warnings.
+
+
+## Artwork drag regression fix (2026-09-06)
+
+- Removed the free-mode guard that incorrectly prevented artwork dragging. Camera controls remain disabled during an active artwork drag; blank-space dragging still controls the camera.
+- Browser verified free-mode movement from (u=1.2, v=1.5) to (u=2.04, v=1.76), with unchanged room framing and the observer following the artwork. Undo restored the original placement; orbit-mode dragging then moved it to (u=1.66, v=1.86). No browser errors; typecheck passes.

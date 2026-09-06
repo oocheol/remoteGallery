@@ -932,8 +932,7 @@ function GalleryScene(
         : [placement.id],
     );
     props.onWallSelect?.(wall.id);
-    if (view === "free" || placement.locked || e.button !== 0 || e.shiftKey)
-      return;
+    if (placement.locked || e.button !== 0 || e.shiftKey) return;
     const normal = wallInwardNormal(wall, scene.floor.polygon),
       plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
         new THREE.Vector3(...normal),
@@ -1238,7 +1237,7 @@ export default function SceneCanvas(props: SceneCanvasProps) {
         {props.calibrating
           ? "기준 거리의 두 지점을 클릭하세요"
           : props.view === "free"
-            ? "WASD 이동 · E 상승 / Q 하강 · Shift 빠르게 · 드래그로 시선 · 우클릭으로 이동 · 휠로 전후 이동"
+            ? "WASD 이동 · E 상승 / Q 하강 · 작품 드래그로 배치 · 빈 공간 드래그로 시선 · 우클릭으로 이동 · 휠로 전후 이동"
             : props.readOnly
               ? "더블클릭한 곳에서 자유 이동 · 드래그로 회전 · 휠로 확대"
               : props.view === "top"
