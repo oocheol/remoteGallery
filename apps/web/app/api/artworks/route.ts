@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
           ? "black"
           : (body.frameMaterial as Artwork["frameMaterial"]),
       matWidthMm: numeric(body.matWidthMm, "matWidthMm", false),
+      matTopMm: numeric(body.matTopMm ?? body.matWidthMm, "matTopMm", false),
+      matBottomMm: numeric(
+        body.matBottomMm ?? body.matWidthMm,
+        "matBottomMm",
+        false,
+      ),
       matSizing: "inset",
       frameSizing: "inset",
     };
@@ -79,6 +85,8 @@ export async function POST(request: NextRequest) {
         artwork.frameWidthMm,
         artwork.frameDepthMm,
         artwork.matWidthMm ?? 0,
+        artwork.matTopMm ?? 0,
+        artwork.matBottomMm ?? 0,
       ].some((value) => value > 1000)
     )
       throw new ApiError(

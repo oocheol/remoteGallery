@@ -6,7 +6,12 @@ import { artworkLayout } from "@gallery/three";
 
 export type FramePatch = Pick<
   Artwork,
-  "frameMaterial" | "frameWidthMm" | "frameDepthMm" | "matWidthMm"
+  | "frameMaterial"
+  | "frameWidthMm"
+  | "frameDepthMm"
+  | "matWidthMm"
+  | "matTopMm"
+  | "matBottomMm"
 >;
 
 export function ArtworkFramePanel({
@@ -18,19 +23,26 @@ export function ArtworkFramePanel({
 }) {
   const patternId = useId().replaceAll(":", "");
   const frame = artwork.frameWidthMm;
-  const insetLimit = Math.max(
-    0,
-    Math.floor((Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2),
-  );
-  const frameLimit = Math.max(
-    0,
-    Math.min(1000, insetLimit - (artwork.matWidthMm ?? 0)),
-  );
   const mat = artwork.matWidthMm ?? 0;
+  const top = artwork.matTopMm ?? mat;
+  const bottom = artwork.matBottomMm ?? mat;
+  const limit = (value: number) =>
+    Math.max(0, Math.min(1000, Math.floor(value)));
+  const frameLimit = limit(
+    Math.min(
+      (artwork.widthMm - 2 * mat - 1) / 2,
+      (artwork.heightMm - top - bottom - 1) / 2,
+    ),
+  );
+  const matLimit = limit((artwork.widthMm - 2 * frame - 1) / 2);
+  const topLimit = limit(artwork.heightMm - 2 * frame - bottom - 1);
+  const bottomLimit = limit(artwork.heightMm - 2 * frame - top - 1);
+  const uniformLimit = limit(
+    (Math.min(artwork.widthMm, artwork.heightMm) - 2 * frame - 1) / 2,
+  );
   const layout = artworkLayout(artwork);
   const width = layout.widthMm;
   const height = layout.heightMm;
-  const matLimit = Math.max(0, Math.min(1000, Math.floor(insetLimit - frame)));
   const material = artwork.frameMaterial ?? "black";
   return (
     <section className="card frame-panel">
@@ -43,7 +55,7 @@ export function ArtworkFramePanel({
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={`${artwork.title}, ${frame ? (material === "wood" ? "우드 액자" : "블랙 액자") : "프레임 없음"}, 사방 여백 ${mat}mm`}
+          aria-label={`${artwork.title}, ${frame ? (material === "wood" ? "우드 액자" : "블랙 액자") : "프레임 없음"}, 좌우 여백 ${mat}mm, 위 여백 ${top}mm, 아래 여백 ${bottom}mm`}
         >
           <defs>
             <pattern
@@ -77,7 +89,7 @@ export function ArtworkFramePanel({
           <image
             href={artwork.imageUrl}
             x={frame + layout.matWidthMm}
-            y={frame + layout.matWidthMm}
+            y={frame + layout.matTopMm}
             width={layout.imageWidthMm}
             height={layout.imageHeightMm}
             preserveAspectRatio="none"
@@ -128,20 +140,49 @@ export function ArtworkFramePanel({
         }
       />
       <FrameDimension
-        label="여백 · 사방"
+        label="여백 · 좌우"
         value={mat}
         max={Math.min(200, matLimit)}
         limit={matLimit}
-        onChange={(value) => onChange({ matWidthMm: value })}
+        onChange={(value) =>
+          onChange({ matWidthMm: value, matTopMm: top, matBottomMm: bottom })
+        }
       />
-      <div className="mat-presets" role="group" aria-label="여백 빠른 선택">
+      <FrameDimension
+        label="여백 · 위"
+        value={top}
+        max={Math.min(200, topLimit)}
+        limit={topLimit}
+        onChange={(value) => onChange({ matTopMm: value })}
+      />
+      <FrameDimension
+        label="여백 · 아래"
+        value={bottom}
+        max={Math.min(200, bottomLimit)}
+        limit={bottomLimit}
+        onChange={(value) => onChange({ matBottomMm: value })}
+      />
+      <p className="muted" style={{ fontSize: 11, margin: "8px 0 4px" }}>
+        전체 여백을 같은 값으로
+      </p>
+      <div
+        className="mat-presets"
+        role="group"
+        aria-label="전체 여백 빠른 선택"
+      >
         {[0, 30, 50, 80].map((value) => (
           <button
             type="button"
             key={value}
-            aria-pressed={mat === value}
-            disabled={value > matLimit}
-            onClick={() => onChange({ matWidthMm: value })}
+            aria-pressed={mat === value && top === value && bottom === value}
+            disabled={value > uniformLimit}
+            onClick={() =>
+              onChange({
+                matWidthMm: value,
+                matTopMm: value,
+                matBottomMm: value,
+              })
+            }
           >
             {value === 0 ? "여백 없음" : `${value} mm`}
           </button>
@@ -169,7 +210,8 @@ export function ArtworkFramePanel({
       </div>
       <p className="frame-help">
         입력 크기는 액자까지 포함한 전체 크기입니다. 프레임과 여백은 그 안에
-        들어가며 사진만 작아집니다. 상단 ‘저장’으로 보관합니다.
+        들어갑니다. 좌우는 같게, 위·아래는 따로 조절하며 사진 크기와 위치가
+        바뀝니다. 상단 ‘저장’으로 보관합니다.
       </p>
     </section>
   );

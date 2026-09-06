@@ -222,6 +222,42 @@ assert.equal(
   50,
   "share remains immutable after style edits",
 );
+const asymmetric = { ...wood, matTopMm: 30, matBottomMm: 80 };
+await save([asymmetric]);
+detail = await api<GalleryDetail>(path);
+assert.equal(detail.artworks[0].matTopMm, 30);
+assert.equal(detail.artworks[0].matBottomMm, 80);
+assert.deepEqual(artworkLayout(detail.artworks[0]).imageOffsetYMm, 25);
+assert.equal(artworkLayout(detail.artworks[0]).imageHeightMm, 750);
+for (const patch of [
+  { matTopMm: -1 },
+  { matBottomMm: 1001 },
+  { matTopMm: 800 },
+])
+  await save(
+    [{ ...asymmetric, ...patch }],
+    [placement],
+    detail.exhibition.revision,
+    400,
+  );
+const asymmetricShare = await api<{ token: string }>(
+  "/api/shares",
+  "POST",
+  { exhibitionId: detail.exhibition.id },
+  201,
+);
+await save([{ ...asymmetric, matTopMm: 80, matBottomMm: 30 }]);
+detail = await api<GalleryDetail>(path);
+assert.equal(artworkLayout(detail.artworks[0]).imageOffsetYMm, -25);
+const asymmetricSnapshot: ShareSnapshot = await (
+  await fetch(base + "/api/shares/" + asymmetricShare.token)
+).json();
+assert.equal(asymmetricSnapshot.artworks[0].matTopMm, 30);
+assert.equal(asymmetricSnapshot.artworks[0].matBottomMm, 80);
+await save([asymmetric]);
+console.log(
+  "PASS: independent top/bottom save/reload, inset limits, photo offset, immutable asymmetric shares.",
+);
 await mkdir(".gallery-twin", { recursive: true });
 await writeFile(
   ".gallery-twin/frame-check.json",

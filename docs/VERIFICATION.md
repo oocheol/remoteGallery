@@ -78,3 +78,11 @@ Local-only application (loopback); links work on this running local server, not 
 - `npx tsx tests/frame-flow.ts` passes save/reload, fixed outer extents at touching positions, combined-inset rejection/rollback, stale revision and immutable new shares.
 - Browser verified 700×700mm with frame 20mm + mat 50mm -> photo 560×560mm; frame 60mm + mat 50mm -> photo 480×480mm. SVG outer viewBox remained 700×700; 3D outer size and position stayed fixed, wood material and save worked without browser errors.
 - Typecheck and production build pass (existing storage tracing warnings remain).
+
+
+## Independent top/bottom mat (2026-09-06)
+
+- Added separate left/right, top and bottom mat inputs and a clearly labelled uniform preset group. Side changes preserve vertical values. Both SVG and 3D move the photo toward the smaller vertical mat while keeping the outer frame fixed. The 3D white mat is also rendered when side margins are zero but top/bottom are positive.
+- All 19 geometry tests pass. Asymmetric 700mm frame case verifies a 560×550mm image and +25mm vertical center offset for frame 20, side 50, top 30, bottom 80. Tests cover reversed margins, distinct width/height bounds and legacy symmetric fallback.
+- `npx tsx tests/frame-flow.ts` passes asymmetric save/reload, combined inset validation and immutable share checks, alongside the existing fixed-frame cases.
+- Browser verified side 40, top 30, bottom 120 on a 600×900mm frame: SVG photo x=60, y=50, width=480, height=710; preview and 3D show the larger bottom mat. Save succeeded without browser errors. Typecheck and build pass (existing storage tracing warnings remain).

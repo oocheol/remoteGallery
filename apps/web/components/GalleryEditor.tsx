@@ -405,6 +405,8 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
               frameWidthMm: art.frameWidthMm,
               frameDepthMm: art.frameDepthMm,
               matWidthMm: art.matWidthMm ?? 0,
+              matTopMm: art.matTopMm ?? art.matWidthMm ?? 0,
+              matBottomMm: art.matBottomMm ?? art.matWidthMm ?? 0,
             })),
         }),
       });

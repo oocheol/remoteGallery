@@ -180,7 +180,9 @@ function ArtworkMesh({
             roughness={artwork.frameMaterial === "wood" ? 0.78 : 0.48}
           />
         </mesh>
-        {(artwork.matWidthMm ?? 0) > 0 && (
+        {(layout.matWidthMm > 0 ||
+          layout.matTopMm > 0 ||
+          layout.matBottomMm > 0) && (
           <mesh position={[0, 0, depth / 2 + 0.001]}>
             <planeGeometry
               args={[layout.boardWidthMm / 1000, layout.boardHeightMm / 1000]}
@@ -194,7 +196,7 @@ function ArtworkMesh({
             />
           </mesh>
         )}
-        <mesh position={[0, 0, depth / 2 + 0.002]}>
+        <mesh position={[0, layout.imageOffsetYMm / 1000, depth / 2 + 0.002]}>
           <planeGeometry
             args={[layout.imageWidthMm / 1000, layout.imageHeightMm / 1000]}
           />

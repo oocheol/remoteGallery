@@ -455,3 +455,52 @@ describe("fixed entered outer dimensions", () => {
     });
   });
 });
+
+describe("independent top and bottom mat", () => {
+  it("moves the photograph up for a larger bottom mat while keeping the 700mm frame fixed", () => {
+    const square = {
+      ...art,
+      widthMm: 700,
+      heightMm: 700,
+      frameWidthMm: 20,
+      matWidthMm: 50,
+      matTopMm: 30,
+      matBottomMm: 80,
+    };
+    expect(artworkLayout(square)).toMatchObject({
+      widthMm: 700,
+      heightMm: 700,
+      imageWidthMm: 560,
+      imageHeightMm: 550,
+      imageOffsetYMm: 25,
+      matTopMm: 30,
+      matBottomMm: 80,
+    });
+    expect(
+      artworkLayout({ ...square, matTopMm: 80, matBottomMm: 30 })
+        .imageOffsetYMm,
+    ).toBe(-25);
+    expect(artworkLayout({ ...square, matWidthMm: 0 }).imageHeightMm).toBe(550);
+    expect(artworkSize(square)).toMatchObject({ width: 0.7, height: 0.7 });
+    expect(clampPlacement(placement, square, wall)).toEqual(placement);
+  });
+  it("uses separate horizontal and vertical limits and defaults old records to equal margins", () => {
+    const rectangle = {
+      ...art,
+      widthMm: 700,
+      heightMm: 900,
+      frameWidthMm: 20,
+      matWidthMm: 300,
+      matTopMm: 30,
+      matBottomMm: 829,
+    };
+    expect(validArtworkMat(rectangle)).toBe(true);
+    expect(validArtworkMat({ ...rectangle, matBottomMm: 830 })).toBe(false);
+    expect(validArtworkMat({ ...rectangle, matWidthMm: 330 })).toBe(false);
+    expect(validArtworkMat({ ...rectangle, matTopMm: -1 })).toBe(false);
+    const old = artworkLayout({ ...art, matWidthMm: 50 });
+    expect(old.matTopMm).toBe(50);
+    expect(old.matBottomMm).toBe(50);
+    expect(old.imageOffsetYMm).toBe(0);
+  });
+});
