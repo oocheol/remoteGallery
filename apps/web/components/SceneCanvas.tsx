@@ -20,6 +20,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Artwork, Placement, Scene, Vec3, Wall } from "@gallery/shared";
 import {
   artworkSize,
+  artworkLayout,
   clampPlacement,
   pointInPolygon,
   wallCoordinates,
@@ -138,6 +139,7 @@ function ArtworkMesh({
     return result;
   }, [artwork.frameMaterial]);
   useEffect(() => () => woodTexture?.dispose(), [woodTexture]);
+  const layout = artworkLayout(artwork);
   const { width, height, depth } = artworkSize(artwork),
     normal = wallInwardNormal(wall, scene.floor.polygon);
   const point = wallPoint(wall, placement.u, placement.v),
@@ -178,10 +180,7 @@ function ArtworkMesh({
         {(artwork.matWidthMm ?? 0) > 0 && (
           <mesh position={[0, 0, depth / 2 + 0.001]}>
             <planeGeometry
-              args={[
-                (artwork.widthMm + 2 * (artwork.matWidthMm ?? 0)) / 1000,
-                (artwork.heightMm + 2 * (artwork.matWidthMm ?? 0)) / 1000,
-              ]}
+              args={[layout.boardWidthMm / 1000, layout.boardHeightMm / 1000]}
             />
             <meshStandardMaterial
               color="#faf8f2"
@@ -194,7 +193,7 @@ function ArtworkMesh({
         )}
         <mesh position={[0, 0, depth / 2 + 0.002]}>
           <planeGeometry
-            args={[artwork.widthMm / 1000, artwork.heightMm / 1000]}
+            args={[layout.imageWidthMm / 1000, layout.imageHeightMm / 1000]}
           />
           <meshStandardMaterial
             key={texture?.uuid ?? "loading"}

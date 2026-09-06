@@ -3,6 +3,8 @@ import type { Artwork, Placement, Scene, Wall } from "@gallery/shared";
 import {
   alignPlacements,
   artworkSize,
+  artworkLayout,
+  validArtworkMat,
   calibrateScene,
   clampPlacement,
   findCollisions,
@@ -151,23 +153,33 @@ describe("wall coordinates", () => {
   });
 });
 describe("physical bounds and calibration", () => {
-  it("includes mat outside the image in boundaries and collision checks", () => {
+  it("keeps original size and wall spacing fixed while an inset mat shrinks the image", () => {
     const matted = { ...art, matWidthMm: 50, frameMaterial: "wood" as const };
-    expect(artworkSize(matted)).toEqual({
+    expect(artworkSize(matted)).toEqual(artworkSize(art));
+    expect(artworkLayout(matted)).toMatchObject({
+      imageWidthMm: 500,
+      imageHeightMm: 300,
+      boardWidthMm: 600,
+      boardHeightMm: 400,
+    });
+    expect(validatePlacement({ ...placement, u: 0.34 }, matted, wall)).toEqual(
+      [],
+    );
+    const pair = [placement, { ...placement, id: "p2", u: placement.u + 0.7 }];
+    expect(findCollisions(pair, [matted], [wall])).toHaveLength(0);
+    expect(clampPlacement(placement, matted, wall)).toEqual(placement);
+    expect(validArtworkMat({ ...art, matWidthMm: 200 })).toBe(false);
+    expect(validArtworkMat({ ...art, matWidthMm: 199 })).toBe(true);
+    expect(artworkLayout({ ...art, matWidthMm: 0 }).imageWidthMm).toBe(600);
+  });
+  it("preserves the old outside-mat layout in immutable legacy shares", () => {
+    const legacy = { ...art, matWidthMm: 50, matSizing: "outset" as const };
+    expect(artworkSize(legacy)).toEqual({
       width: 0.75,
       height: 0.55,
       depth: 0.035,
     });
-    expect(validatePlacement({ ...placement, u: 0.34 }, art, wall)).toEqual([]);
-    expect(
-      validatePlacement({ ...placement, u: 0.34 }, matted, wall),
-    ).toContain("Artwork frame exceeds wall width");
-    const pair = [placement, { ...placement, id: "p2", u: placement.u + 0.7 }];
-    expect(findCollisions(pair, [art], [wall])).toHaveLength(0);
-    expect(findCollisions(pair, [matted], [wall])).toHaveLength(1);
-    expect(artworkSize({ ...matted, frameMaterial: "black" })).toEqual(
-      artworkSize(matted),
-    );
+    expect(artworkLayout(legacy).imageWidthMm).toBe(600);
   });
   it("includes the full frame, clamps center, and rejects oversized work", () => {
     expect(artworkSize(art)).toEqual({

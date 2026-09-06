@@ -141,11 +141,23 @@ const wood = {
 const pair = [placement, { ...placement, id: randomUUID(), u: 1.9 }];
 await save([plain], pair);
 detail = await api<GalleryDetail>(path);
-await save([wood], pair, detail.exhibition.revision, 400);
+await save([wood], pair);
+detail = await api<GalleryDetail>(path);
+assert.deepEqual(
+  detail.exhibition.placements,
+  pair,
+  "adding inset mat must preserve positions and fit",
+);
+await save(
+  [{ ...wood, frameWidthMm: 100 }],
+  pair,
+  detail.exhibition.revision,
+  400,
+);
 assert.equal(
-  (await api<GalleryDetail>(path)).artworks[0].matWidthMm,
-  0,
-  "failed mat collision must roll back style",
+  (await api<GalleryDetail>(path)).artworks[0].frameWidthMm,
+  20,
+  "failed frame collision must roll back style",
 );
 await save([wood]);
 detail = await api<GalleryDetail>(path);
@@ -156,6 +168,8 @@ assert.equal(detail.artworks[0].heightMm, 900);
 const savedRevision = detail.exhibition.revision;
 for (const invalid of [
   { ...wood, matWidthMm: -1 },
+  { ...wood, matWidthMm: 300 },
+  { ...wood, frameWidthMm: 1000, matWidthMm: 0 },
   { ...wood, frameMaterial: "metal" },
   { ...wood, id: randomUUID() },
   { ...wood, frameWidthMm: 1000, matWidthMm: 1000 },
@@ -181,6 +195,7 @@ const guest = await fetch(base + "/api/shares/" + share.token);
 assert.equal(guest.status, 200);
 const snapshot: ShareSnapshot = await guest.json();
 assert.equal(snapshot.artworks[0].frameMaterial, "wood");
+assert.equal(snapshot.artworks[0].matSizing, "inset");
 assert.equal(
   snapshot.artworks[0].matWidthMm,
   50,
@@ -192,5 +207,5 @@ await writeFile(
   JSON.stringify({ galleryId: id, artworkId: art.id, shareToken: share.token }),
 );
 console.log(
-  "PASS: frame/mat defaults, save/reload, collision and boundary rollback, input validation, stale revision, immutable guest rendering data.",
+  "PASS: fixed inset mat, unchanged placement positions, save/reload, collision and boundary rollback, input validation, stale revision, immutable guest rendering data.",
 );

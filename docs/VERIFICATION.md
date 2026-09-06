@@ -40,3 +40,9 @@ Local-only application (loopback); links work on this running local server, not 
 - Artwork/frame meshes no longer cast wall shadows; the front preview drop shadow is also removed.
 - In orbit mode, double-clicking floor, wall or artwork switches editor/visitor to eye-level walking near the picked point. Wall picks face the wall from the interior; floor picks retain horizontal viewing direction. Wall and polygon clearance are checked, and calibration mode ignores this navigation gesture.
 - Browser verified floor double-click, artwork selection followed by double-click, active walking mode and canvas keyboard focus. New geometry tests cover exact floor coordinates, eye height, inward wall offsets, corner clearance and unusable destinations.
+
+## Fixed-size inset mat correction
+- Original entered dimensions represent the no-mat image area. Mat now shrinks the visible image inside that fixed area; frame-inclusive external dimensions, placement bounds and spacing remain unchanged.
+- A shared layout calculation drives SVG preview, Three.js and collision bounds. UI limits and API validation prevent mat from consuming the image; material/frame width continue to work independently.
+- Geometry and live API tests cover fixed outer dimensions, reduced photo size, unchanged placement positions, invalid mat rejection, rollback, persistence and inset share snapshots. Legacy shares retain their earlier outset presentation.
+- Browser comparison: a 600×900mm input with a 20mm frame kept its 640×940mm external box at both 0mm and 50mm mat; photo changed from 600×900mm to 500×800mm. Keyboard save succeeded; browser reported no errors. Typecheck, 13 geometry tests, live frame API regression and production build passed.

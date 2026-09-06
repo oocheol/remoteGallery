@@ -47,7 +47,11 @@ export async function POST(request: NextRequest) {
         .filter((art) =>
           detail.exhibition.placements.some((p) => p.artworkId === art.id),
         )
-        .map((art) => ({ ...art, imageUrl: rewrite(art.imageUrl) || "" })),
+        .map((art) => ({
+          ...art,
+          matSizing: "inset" as const,
+          imageUrl: rewrite(art.imageUrl) || "",
+        })),
       galleryName: detail.gallery.name,
       createdAt: new Date().toISOString(),
     };

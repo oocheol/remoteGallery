@@ -378,7 +378,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     if (!workingScene || !detail || saving) return;
     if (invalidPlacements.length || collisions.length) {
       setError(
-        "액자가 벽을 벗어나거나 서로 겹칩니다. 위치 또는 여백을 조정해 주세요.",
+        "액자가 벽을 벗어나거나 서로 겹칩니다. 위치와 프레임 설정을 확인해 주세요.",
       );
       return;
     }
@@ -624,7 +624,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       {invalidPlacements.length > 0 || collisions.length > 0 ? (
         <p className="notice" role="alert">
           {invalidPlacements.length
-            ? "액자 전체 크기가 벽을 벗어납니다. 여백을 줄이거나 더 큰 벽으로 옮겨 주세요."
+            ? "액자 전체 크기가 벽을 벗어납니다. 프레임 폭을 줄이거나 더 큰 벽으로 옮겨 주세요."
             : "액자끼리 겹칩니다. 위치를 조정한 후 저장해 주세요."}
         </p>
       ) : null}

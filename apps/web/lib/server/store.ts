@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getDatabase, withTransaction, type SqlDatabase } from '@gallery/db';
 import type { Asset, Artwork, Exhibition, Gallery, GalleryDetail, Job, JobStatus, Placement, Scene } from '@gallery/shared';
 import { sceneSchema, artworkStyleSchema } from '@gallery/shared';
-import { findCollisions, validatePlacement } from '@gallery/three';
+import { findCollisions, validatePlacement, validArtworkMat } from '@gallery/three';
 import { ApiError } from './http';
 
 type AssetRow = { id: string; gallery_id: string; name: string; mime_type: string; size_bytes: number; role: Asset['role']; storage_path: string; public_derivative: boolean };
@@ -156,7 +156,8 @@ export async function updateScene(galleryId: string, input: { scene: unknown; pl
         const prior = artworks.find(art => art.id === style.id);
         if (!prior || ids.has(style.id)) throw new ApiError(400, 'INVALID_ARTWORK_STYLE', '작품이 이 갤러리에 속하지 않거나 중복되었습니다.');
         ids.add(style.id);
-        const next = { ...prior, ...style };
+        const next: Artwork = { ...prior, ...style, matSizing: "inset" };
+        if (!validArtworkMat(next)) throw new ApiError(400, "INVALID_ARTWORK_MAT", "여백을 줄여 주세요. 사진 영역이 최소 1mm 남아야 합니다.");
         artworks = artworks.map(art => art.id === next.id ? next : art);
         changedArtworks.push(next);
       }

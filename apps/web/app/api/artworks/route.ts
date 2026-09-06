@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/http";
 import { createArtwork, getAssetRow } from "@/lib/server/store";
 import type { Artwork } from "@gallery/shared";
+import { validArtworkMat } from "@gallery/three";
 
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
           ? "black"
           : (body.frameMaterial as Artwork["frameMaterial"]),
       matWidthMm: numeric(body.matWidthMm, "matWidthMm", false),
+      matSizing: "inset",
     };
     if (!["wood", "black"].includes(artwork.frameMaterial!))
       throw new ApiError(
@@ -82,6 +84,12 @@ export async function POST(request: NextRequest) {
         400,
         "INVALID_ARTWORK_STYLE",
         "프레임과 여백은 0–1000mm 범위로 입력하세요.",
+      );
+    if (!validArtworkMat(artwork))
+      throw new ApiError(
+        400,
+        "INVALID_ARTWORK_MAT",
+        "여백이 입력한 작품 크기보다 큽니다.",
       );
     return NextResponse.json(await createArtwork(artwork), { status: 201 });
   } catch (error) {

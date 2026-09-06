@@ -83,21 +83,50 @@ export function wallCoordinates(wall: Wall, point: Vec3): Vec2 {
     point[1],
   ];
 }
+/** Layout in millimeters; mat consumes the fixed no-mat image area. */
+export function artworkLayout(artwork: Artwork) {
+  const outset = artwork.matSizing === "outset";
+  const maxMat = Math.max(
+    0,
+    (Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2,
+  );
+  const mat = Math.max(
+    0,
+    Math.min(artwork.matWidthMm ?? 0, outset ? Infinity : maxMat),
+  );
+  const boardWidthMm = artwork.widthMm + (outset ? 2 * mat : 0);
+  const boardHeightMm = artwork.heightMm + (outset ? 2 * mat : 0);
+  return {
+    widthMm: boardWidthMm + 2 * artwork.frameWidthMm,
+    heightMm: boardHeightMm + 2 * artwork.frameWidthMm,
+    boardWidthMm,
+    boardHeightMm,
+    imageWidthMm: artwork.widthMm - (outset ? 0 : 2 * mat),
+    imageHeightMm: artwork.heightMm - (outset ? 0 : 2 * mat),
+    matWidthMm: mat,
+  };
+}
+export function validArtworkMat(
+  artwork: Pick<Artwork, "widthMm" | "heightMm" | "matWidthMm" | "matSizing">,
+) {
+  const mat = artwork.matWidthMm ?? 0;
+  return (
+    Number.isFinite(mat) &&
+    mat >= 0 &&
+    (artwork.matSizing === "outset" ||
+      mat <= Math.max(0, (Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2))
+  );
+}
 /** Overall frame dimensions in meters. Artwork millimeters are never scene-scaled. */
 export function artworkSize(artwork: Artwork): {
   width: number;
   height: number;
   depth: number;
 } {
+  const layout = artworkLayout(artwork);
   return {
-    width:
-      (artwork.widthMm +
-        2 * (artwork.frameWidthMm + (artwork.matWidthMm ?? 0))) /
-      1000,
-    height:
-      (artwork.heightMm +
-        2 * (artwork.frameWidthMm + (artwork.matWidthMm ?? 0))) /
-      1000,
+    width: layout.widthMm / 1000,
+    height: layout.heightMm / 1000,
     depth: Math.max(artwork.depthMm, artwork.frameDepthMm, 1) / 1000,
   };
 }
@@ -138,6 +167,7 @@ export function validatePlacement(
   const errors: string[] = [],
     [x, y] = placementExtents(artwork, p.rotation),
     length = wallLength(wall);
+  if (!validArtworkMat(artwork)) errors.push("Mat leaves no usable image area");
   if (p.wallId !== wall.id) errors.push("Placement wall does not match");
   if (![p.u, p.v, p.rotation, length, wall.height, x, y].every(Number.isFinite))
     return [...errors, "Placement contains non-finite dimensions"];

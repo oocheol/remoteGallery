@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import type { Artwork } from "@gallery/shared";
+import { artworkLayout } from "@gallery/three";
 
 export type FramePatch = Pick<
   Artwork,
@@ -18,8 +19,16 @@ export function ArtworkFramePanel({
   const patternId = useId().replaceAll(":", "");
   const frame = artwork.frameWidthMm;
   const mat = artwork.matWidthMm ?? 0;
-  const width = artwork.widthMm + 2 * (frame + mat);
-  const height = artwork.heightMm + 2 * (frame + mat);
+  const layout = artworkLayout(artwork);
+  const width = layout.widthMm;
+  const height = layout.heightMm;
+  const matLimit = Math.max(
+    0,
+    Math.min(
+      1000,
+      Math.floor((Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2),
+    ),
+  );
   const material = artwork.frameMaterial ?? "black";
   return (
     <section className="card frame-panel">
@@ -65,10 +74,10 @@ export function ArtworkFramePanel({
           />
           <image
             href={artwork.imageUrl}
-            x={frame + mat}
-            y={frame + mat}
-            width={artwork.widthMm}
-            height={artwork.heightMm}
+            x={frame + layout.matWidthMm}
+            y={frame + layout.matWidthMm}
+            width={layout.imageWidthMm}
+            height={layout.imageHeightMm}
             preserveAspectRatio="none"
           />
         </svg>
@@ -118,7 +127,8 @@ export function ArtworkFramePanel({
       <FrameDimension
         label="여백 · 사방"
         value={mat}
-        max={200}
+        max={Math.min(200, matLimit)}
+        limit={matLimit}
         onChange={(value) => onChange({ matWidthMm: value })}
       />
       <div className="mat-presets" role="group" aria-label="여백 빠른 선택">
@@ -127,6 +137,7 @@ export function ArtworkFramePanel({
             type="button"
             key={value}
             aria-pressed={mat === value}
+            disabled={value > matLimit}
             onClick={() => onChange({ matWidthMm: value })}
           >
             {value === 0 ? "여백 없음" : `${value} mm`}
@@ -135,21 +146,27 @@ export function ArtworkFramePanel({
       </div>
       <div className="frame-measurements">
         <span>
-          작품 원본{" "}
+          입력 크기 · 고정{" "}
           <strong>
             {artwork.widthMm} × {artwork.heightMm} mm
           </strong>
         </span>
         <span>
-          액자 포함{" "}
+          액자 포함 · 고정{" "}
           <strong>
             {width} × {height} mm
           </strong>
         </span>
+        <span>
+          사진 표시 크기{" "}
+          <strong>
+            {layout.imageWidthMm} × {layout.imageHeightMm} mm
+          </strong>
+        </span>
       </div>
       <p className="frame-help">
-        여백은 작품 바깥에 더해집니다. 같은 작품의 모든 배치에 적용되며, 상단
-        ‘저장’으로 보관합니다.
+        입력 크기는 여백이 없을 때의 기준입니다. 여백은 그 안에 생기며 사진만
+        작아집니다. 상단 ‘저장’으로 보관합니다.
       </p>
     </section>
   );
@@ -159,11 +176,13 @@ function FrameDimension({
   label,
   value,
   max,
+  limit = 1000,
   onChange,
 }: {
   label: string;
   value: number;
   max: number;
+  limit?: number;
   onChange: (v: number) => void;
 }) {
   return (
@@ -174,7 +193,7 @@ function FrameDimension({
           type="range"
           aria-label={`${label} 슬라이더`}
           min={0}
-          max={Math.max(max, value)}
+          max={Math.min(limit, Math.max(max, value))}
           step={1}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
@@ -185,13 +204,13 @@ function FrameDimension({
           type="number"
           aria-label={`${label} mm`}
           min={0}
-          max={1000}
+          max={limit}
           step={1}
           value={value}
           onChange={(e) => {
             const next = e.target.valueAsNumber;
             if (Number.isFinite(next))
-              onChange(Math.max(0, Math.min(1000, next)));
+              onChange(Math.max(0, Math.min(limit, next)));
           }}
         />
         <span>mm</span>
