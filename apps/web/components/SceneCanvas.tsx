@@ -8,6 +8,7 @@ import {
   type ThreeEvent,
 } from "@react-three/fiber";
 import { Html, Line, OrbitControls } from "@react-three/drei";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, RotateCcw } from "lucide-react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Artwork, Placement, Scene, Vec3, Wall } from "@gallery/shared";
@@ -32,10 +33,14 @@ export interface SceneCanvasProps {
   selectedWallId?: string;
   readOnly?: boolean;
   view?: "orbit" | "top" | "walk";
+  onViewChange?: (view: "orbit") => void;
   showGuides?: boolean;
   onPointPick?: (point: Vec3) => void;
   calibrating?: boolean;
 }
+
+type CameraAction = "left" | "right" | "up" | "down" | "reset";
+type CameraCommand = { sequence: number; action: CameraAction };
 
 class SceneBoundary extends React.Component<
   React.PropsWithChildren,
@@ -194,14 +199,17 @@ function CameraRig({
   view,
   dragging,
   bounds,
+  command,
 }: {
   scene: Scene;
   view: "orbit" | "top" | "walk";
   dragging: boolean;
   bounds: Bounds;
+  command: CameraCommand | null;
 }) {
   const { camera, gl, size } = useThree();
   const controls = useRef<OrbitControlsImpl>(null);
+  const handledCommand = useRef(0);
   const keys = useRef(new Set<string>());
   useEffect(() => {
     const c = controls.current;
@@ -273,7 +281,35 @@ function CameraRig({
     camera.far = Math.max(500, span * 30);
     camera.updateProjectionMatrix();
     c.update();
+    c.saveState();
   }, [camera, view, bounds, scene.floor.polygon, size.width, size.height]);
+  useEffect(() => {
+    const c = controls.current;
+    if (!c || !command || handledCommand.current === command.sequence) return;
+    handledCommand.current = command.sequence;
+    if (dragging) return;
+    const step = Math.PI / 12;
+    if (command.action === "reset") {
+      // Clear any remaining rotation momentum before restoring the saved view.
+      const damping = c.enableDamping;
+      c.enableDamping = false;
+      c.update();
+      c.reset();
+      c.enableDamping = damping;
+    }
+    else if (command.action === "left" || command.action === "right")
+      c.setAzimuthalAngle(
+        c.getAzimuthalAngle() + (command.action === "left" ? -step : step),
+      );
+    else
+      c.setPolarAngle(
+        THREE.MathUtils.clamp(
+          c.getPolarAngle() + (command.action === "up" ? -step : step),
+          c.minPolarAngle,
+          c.maxPolarAngle,
+        ),
+      );
+  }, [command, dragging]);
   useEffect(() => {
     const el = gl.domElement;
     el.tabIndex = 0;
@@ -373,8 +409,8 @@ function CameraRig({
       enableZoom={view !== "walk"}
       minDistance={view === "walk" ? 0.001 : 0.15}
       maxDistance={200}
-      minPolarAngle={view === "walk" ? Math.PI * 0.32 : 0}
-      maxPolarAngle={view === "walk" ? Math.PI * 0.68 : Math.PI * 0.49}
+      minPolarAngle={view === "walk" ? Math.PI * 0.32 : 0.001}
+      maxPolarAngle={view === "walk" ? Math.PI * 0.68 : Math.PI * 0.95}
     />
   );
 }
@@ -608,7 +644,7 @@ function SparseCloud({
   );
 }
 
-function GalleryScene(props: SceneCanvasProps) {
+function GalleryScene(props: SceneCanvasProps & { command: CameraCommand | null }) {
   const {
     scene,
     artworks,
@@ -845,12 +881,18 @@ function GalleryScene(props: SceneCanvasProps) {
         view={view}
         dragging={!!draft}
         bounds={cloudBounds ?? baseBounds}
+        command={props.command}
       />
     </>
   );
 }
 
 export default function SceneCanvas(props: SceneCanvasProps) {
+  const [command, setCommand] = useState<CameraCommand | null>(null);
+  const rotate = (action: CameraAction) => {
+    if (props.view === "top" && action !== "reset") props.onViewChange?.("orbit");
+    setCommand((previous) => ({ sequence: (previous?.sequence ?? 0) + 1, action }));
+  };
   return (
     <div
       style={{
@@ -882,13 +924,36 @@ export default function SceneCanvas(props: SceneCanvasProps) {
             gl.toneMappingExposure = 1.05;
           }}
         >
-          <GalleryScene {...props} />
+          <GalleryScene {...props} command={command} />
         </Canvas>
       </SceneBoundary>
+      {props.view !== "walk" && !props.calibrating && (
+        <div className="scene-rotation" role="group" aria-label="도면 회전">
+          <span className="scene-rotation-label">도면 회전</span>
+          {([
+            ["up", "위로 회전", ArrowUp],
+            ["left", "왼쪽으로 회전", ArrowLeft],
+            ["reset", "처음 시점으로", RotateCcw],
+            ["right", "오른쪽으로 회전", ArrowRight],
+            ["down", "아래로 회전", ArrowDown],
+          ] as const).map(([action, label, Icon]) => (
+            <button
+              key={action}
+              type="button"
+              className={`scene-rotation-button scene-rotation-${action}`}
+              aria-label={label}
+              title={label}
+              onClick={() => rotate(action)}
+            >
+              <Icon size={18} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
-          bottom: 14,
+          bottom: 62,
           left: 16,
           color: "#5b625a",
           fontSize: 11,
@@ -896,6 +961,7 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           background: "rgba(250,250,247,.88)",
           padding: "6px 10px",
           borderRadius: 6,
+          maxWidth: "calc(100% - 32px)",
         }}
       >
         {props.calibrating
@@ -903,10 +969,10 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           : props.view === "walk"
             ? "화면 클릭 후 WASD / 방향키로 이동 · 드래그로 둘러보기"
             : props.readOnly
-              ? "드래그하여 둘러보기 · 휠로 확대"
+              ? "드래그 / 화살표 버튼으로 회전 · 휠로 확대"
               : props.view === "top"
-                ? "휠로 확대 · 우클릭 드래그로 이동"
-                : "드래그로 회전 · 휠로 확대 · 작품을 드래그하여 배치"}
+                ? "화살표 버튼으로 3D 회전 · 휠로 확대 · 우클릭 드래그로 이동"
+                : "빈 공간 드래그 / 화살표 버튼으로 회전 · 휠로 확대 · 작품 드래그로 배치"}
         {props.scene.visual.kind === "sparse" &&
           " · 희소 포인트 클라우드 — 벽·바닥 미추정"}
       </div>

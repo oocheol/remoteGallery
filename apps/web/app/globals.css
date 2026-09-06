@@ -8,6 +8,51 @@
   --terra: #ba5d45;
   --deep: #111827;
 }
+.scene-rotation {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 36px);
+  grid-template-rows: 20px repeat(3, 36px);
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid #d7cdbc;
+  border-radius: 12px;
+  background: rgba(250, 250, 247, 0.94);
+  color: #18202b;
+  box-shadow: 0 3px 12px #18202b0d;
+}
+.scene-rotation-label {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.scene-rotation-button {
+  display: grid;
+  place-items: center;
+  border: 1px solid #d7cdbc;
+  border-radius: 6px;
+  background: #fffdf9;
+  color: #18202b;
+  padding: 0;
+  touch-action: manipulation;
+}
+.scene-rotation-button:hover { background: #ede5d7; }
+.scene-rotation-button:active { background: #d7cdbc; }
+.scene-rotation-button:focus-visible { outline: 2px solid #2456b8; outline-offset: 2px; }
+.scene-rotation-up { grid-area: 2 / 2; }
+.scene-rotation-left { grid-area: 3 / 1; }
+.scene-rotation-reset { grid-area: 3 / 2; }
+.scene-rotation-right { grid-area: 3 / 3; }
+.scene-rotation-down { grid-area: 4 / 2; }
+@media (pointer: coarse) {
+  .scene-rotation {
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: 20px repeat(3, 44px);
+  }
+}
 * {
   box-sizing: border-box;
 }

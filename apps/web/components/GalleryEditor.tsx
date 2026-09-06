@@ -686,6 +686,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
               onWallSelect={setSelectedWallId}
               selectedWallId={selectedWallId}
               view={view}
+              onViewChange={setView}
               showGuides={showGuides}
               calibrating={calibration}
               onPointPick={pickPoint}
