@@ -165,10 +165,18 @@ export async function updateScene(galleryId: string, input: { scene: unknown; pl
     const existing = await db.query<{ placements: unknown }>('SELECT placements FROM exhibitions WHERE id=$1', [exhibition.id]);
     // Scene changes are rejected when already-saved artwork could become invalid.
     const placements = input.placements === undefined ? validatePlacements(json<Placement[]>(existing.rows[0].placements), parsedScene, artworks) : validatePlacements(input.placements, parsedScene, artworks);
+    const priorObservers = priorSceneResult.rows[0] ? json<Scene>(priorSceneResult.rows[0].scene).observers ?? [] : [];
+    const observersChanged = JSON.stringify(priorObservers) !== JSON.stringify(parsedScene.observers ?? []);
+    if (observersChanged && input.expectedRevision === undefined) throw new ApiError(400, 'REVISION_REQUIRED', 'Observer changes require an exhibition revision');
+    const observerIds = new Set<string>(), observerPlacements = new Set<string>();
+    for (const observer of parsedScene.observers ?? []) {
+      if (observerIds.has(observer.id) || observerPlacements.has(observer.placementId) || !placements.some(p => p.id === observer.placementId)) throw new ApiError(400, 'INVALID_OBSERVER', '관람자의 작품 연결이 올바르지 않습니다.');
+      observerIds.add(observer.id); observerPlacements.add(observer.placementId);
+    }
     const timestamp = now();
     for (const art of changedArtworks) await db.query('UPDATE artworks SET artwork=$1 WHERE id=$2 AND gallery_id=$3', [JSON.stringify(art), art.id, galleryId]);
     await db.query('INSERT INTO scenes(gallery_id,scene,updated_at) VALUES($1,$2,$3) ON CONFLICT(gallery_id) DO UPDATE SET scene=EXCLUDED.scene, updated_at=EXCLUDED.updated_at', [galleryId, JSON.stringify(parsedScene), timestamp]);
-    if (input.placements !== undefined || changedArtworks.length) await db.query('UPDATE exhibitions SET placements=$1, revision=revision+1, updated_at=$2 WHERE id=$3', [JSON.stringify(placements), timestamp, exhibition.id]);
+    if (input.placements !== undefined || changedArtworks.length || observersChanged) await db.query('UPDATE exhibitions SET placements=$1, revision=revision+1, updated_at=$2 WHERE id=$3', [JSON.stringify(placements), timestamp, exhibition.id]);
     await db.query('UPDATE galleries SET updated_at=$1 WHERE id=$2', [timestamp, galleryId]);
     return parsedScene;
   });
@@ -184,6 +192,11 @@ export async function updateExhibition(id: string, input: { expectedRevision: un
     const artResult = await db.query<{ artwork: unknown }>('SELECT artwork FROM artworks WHERE gallery_id=$1', [ex.gallery_id]);
     const placements = validatePlacements(input.placements, json<Scene>(sceneResult.rows[0].scene), artResult.rows.map(row => json<Artwork>(row.artwork)));
     const timestamp = now();
+    const scene = json<Scene>(sceneResult.rows[0].scene);
+    if (scene.observers?.some(o => !placements.some(p => p.id === o.placementId))) {
+      scene.observers = scene.observers.filter(o => placements.some(p => p.id === o.placementId));
+      await db.query('UPDATE scenes SET scene=$1,updated_at=$2 WHERE gallery_id=$3', [JSON.stringify(scene), timestamp, ex.gallery_id]);
+    }
     await db.query('UPDATE exhibitions SET title=$1,placements=$2,revision=revision+1,updated_at=$3 WHERE id=$4', [input.title.trim(), JSON.stringify(placements), timestamp, id]);
     return { id: ex.id, galleryId: ex.gallery_id, title: input.title.trim(), revision: ex.revision + 1, placements, updatedAt: timestamp } satisfies Exhibition;
   });

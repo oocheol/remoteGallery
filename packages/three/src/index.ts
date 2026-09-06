@@ -368,3 +368,62 @@ export function wallInwardNormal(wall: Wall, polygon: Vec2[]): Vec3 {
     );
   return !left && right ? [-nx, 0, -nz] : [nx, 0, nz];
 }
+
+/** A person's eyes stand one horizontal metre from the artwork's front surface. */
+export function observerPose(
+  scene: Scene,
+  placement: Placement,
+  artwork: Artwork,
+  heightMm: number,
+) {
+  const wall = scene.walls.find((w) => w.id === placement.wallId);
+  if (!wall) return null;
+  const h = heightMm / 1000;
+  const normal = wallInwardNormal(wall, scene.floor.polygon);
+  const center = wallPoint(wall, placement.u, placement.v);
+  const offset = wall.thickness / 2 + artworkSize(artwork).depth + 0.011;
+  const target: Vec3 = [
+    center[0] + normal[0] * offset,
+    center[1] + scene.floor.y,
+    center[2] + normal[2] * offset,
+  ];
+  const eye: Vec3 = [
+    target[0] + normal[0],
+    scene.floor.y + h * 0.93,
+    target[2] + normal[2],
+  ];
+  const position: Vec3 = [
+    eye[0] + normal[0] * h * 0.063,
+    scene.floor.y,
+    eye[2] + normal[2] * h * 0.063,
+  ];
+  const fits =
+    (!scene.floor.polygon.length ||
+      pointInPolygon([position[0], position[2]], scene.floor.polygon)) &&
+    scene.walls.every((w) => {
+      const dx = w.end[0] - w.start[0],
+        dz = w.end[1] - w.start[1];
+      const t = Math.max(
+        0,
+        Math.min(
+          1,
+          ((position[0] - w.start[0]) * dx + (position[2] - w.start[1]) * dz) /
+            (dx * dx + dz * dz || 1),
+        ),
+      );
+      return (
+        Math.hypot(
+          position[0] - w.start[0] - t * dx,
+          position[2] - w.start[1] - t * dz,
+        ) >=
+        w.thickness / 2 + h * 0.12
+      );
+    });
+  return {
+    position,
+    eye,
+    target,
+    yaw: Math.atan2(-normal[0], -normal[2]),
+    fits,
+  };
+}

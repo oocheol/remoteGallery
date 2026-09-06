@@ -28,8 +28,9 @@ export function SceneStage(props: {
   onWallSelect?: (wallId: string) => void;
   selectedWallId?: string;
   readOnly?: boolean;
-  view?: "orbit" | "top" | "walk";
-  onViewChange?: (view: "orbit" | "walk") => void;
+  view?: "orbit" | "top" | "free";
+  onViewChange?: (view: "orbit" | "free") => void;
+  observerFocus?: { id: string; sequence: number };
   showGuides?: boolean;
   onPointPick?: (point: Vec3) => void;
   calibrating?: boolean;

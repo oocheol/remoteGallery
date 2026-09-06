@@ -9,7 +9,7 @@ import { SceneStage } from "./SceneStage";
 export function ExhibitionVisitor({ token }: { token: string }) {
   const [snapshot, setSnapshot] = useState<ShareSnapshot | null>(null);
   const [error, setError] = useState("");
-  const [view, setView] = useState<"orbit" | "walk">("walk");
+  const [view, setView] = useState<"orbit" | "free">("orbit");
   const [index, setIndex] = useState(0);
   useEffect(() => {
     api<ShareSnapshot>(`/api/shares/${token}`)
@@ -153,9 +153,9 @@ export function ExhibitionVisitor({ token }: { token: string }) {
                 borderColor: "#ffffff4d",
                 color: "white",
               }}
-              onClick={() => setView("walk")}
+              onClick={() => setView("free")}
             >
-              <Eye size={14} /> 보행
+              <Eye size={14} /> 자유 모드
             </button>
             <button
               className="btn ghost"

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Artwork, Placement, Scene, Wall } from "@gallery/shared";
 import {
+  observerPose,
   alignPlacements,
   artworkSize,
   artworkLayout,
@@ -339,5 +340,67 @@ describe("collisions and layout", () => {
     expect(result[1].v).toBe(1.725);
     expect(result[2].v).toBe(0.5);
     expect(result[3].v).toBe(1);
+  });
+});
+
+describe("observer scale and viewing distance", () => {
+  it("keeps eyes 1m from the front surface, including frame depth, on either wall direction", () => {
+    for (const reverse of [false, true]) {
+      const room: Scene = {
+        ...scene,
+        floor: {
+          polygon: [
+            [0, 0],
+            [4, 0],
+            [4, 4],
+            [0, 4],
+          ],
+          y: 0.3,
+        },
+        walls: [
+          {
+            ...wall,
+            start: reverse ? [4, 0] : [0, 0],
+            end: reverse ? [0, 0] : [4, 0],
+          },
+        ],
+      };
+      for (const height of [500, 1700, 2500]) {
+        const pose = observerPose(room, placement, art, height)!;
+        expect(pose.eye[1]).toBeCloseTo(0.3 + (height / 1000) * 0.93);
+        expect(pose.position[1]).toBe(0.3);
+        expect(
+          Math.hypot(
+            pose.eye[0] - pose.target[0],
+            pose.eye[2] - pose.target[2],
+          ),
+        ).toBeCloseTo(1);
+        expect(pose.target[2]).toBeCloseTo(
+          wall.thickness / 2 + art.frameDepthMm / 1000 + 0.011,
+        );
+        expect(pose.eye[2]).toBeGreaterThan(pose.target[2]);
+        expect(pose.fits).toBe(true);
+      }
+    }
+  });
+  it("warns about insufficient room without altering the requested viewing distance", () => {
+    const room: Scene = {
+      ...scene,
+      floor: {
+        polygon: [
+          [0, 0],
+          [4, 0],
+          [4, 0.8],
+          [0, 0.8],
+        ],
+        y: 0,
+      },
+      walls: [{ ...wall, start: [0, 0], end: [4, 0] }],
+    };
+    const pose = observerPose(room, placement, art, 1700)!;
+    expect(pose.fits).toBe(false);
+    expect(
+      Math.hypot(pose.eye[0] - pose.target[0], pose.eye[2] - pose.target[2]),
+    ).toBeCloseTo(1);
   });
 });

@@ -56,6 +56,7 @@ import {
 import { api, ApiError, jobLabel } from "@/lib/api";
 import { AppBrand } from "./AppBrand";
 import { SceneStage } from "./SceneStage";
+import { ObserverPanel } from "./ObserverPanel";
 import { ArtworkFramePanel, type FramePatch } from "./ArtworkFramePanel";
 
 type FrameStyles = Record<string, Partial<FramePatch>>;
@@ -87,7 +88,11 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
   const [selectedArtworkId, setSelectedArtworkId] = useState<
     string | undefined
   >();
-  const [view, setView] = useState<"orbit" | "top" | "walk">("orbit");
+  const [observerFocus, setObserverFocus] = useState<{
+    id: string;
+    sequence: number;
+  }>();
+  const [view, setView] = useState<"orbit" | "top" | "free">("orbit");
   const [showGuides, setShowGuides] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -168,7 +173,12 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
         setHistory((items) => [...items.slice(-39), current]);
         setFuture([]);
       }
-      setWorkingScene(nextScene);
+      setWorkingScene({
+        ...nextScene,
+        observers: nextScene.observers?.filter((o) =>
+          nextPlacements.some((p) => p.id === o.placementId),
+        ),
+      });
       setPlacements(nextPlacements);
       setFrameStyles(nextStyles);
     },
@@ -562,7 +572,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
         <div style={{ display: "flex", gap: 7 }}>
           <button
             className="btn ghost hide-small"
-            onClick={() => setView("walk")}
+            onClick={() => setView("free")}
           >
             <Eye size={15} /> 미리보기
           </button>
@@ -730,7 +740,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                 marginTop: 7,
               }}
             >
-              {(["orbit", "top", "walk"] as const).map((v) => (
+              {(["orbit", "top", "free"] as const).map((v) => (
                 <button
                   key={v}
                   className="btn ghost"
@@ -742,7 +752,11 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                   }}
                   onClick={() => setView(v)}
                 >
-                  {v === "orbit" ? "둘러보기" : v === "top" ? "평면" : "보행"}
+                  {v === "orbit"
+                    ? "둘러보기"
+                    : v === "top"
+                      ? "평면"
+                      : "자유 모드"}
                 </button>
               ))}
             </div>
@@ -838,6 +852,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
               }}
               onWallSelect={setSelectedWallId}
               selectedWallId={selectedWallId}
+              observerFocus={observerFocus}
               view={view}
               onViewChange={setView}
               showGuides={showGuides}
@@ -926,6 +941,29 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                 onUpload={uploadArt}
               />
             </section>
+            <ObserverPanel
+              scene={scene}
+              placements={placements}
+              artworks={artworks}
+              selectedId={selectedPlacement?.id}
+              onSelect={(id) => {
+                setSelectedIds([id]);
+                const p = placements.find((p) => p.id === id);
+                if (p) {
+                  setSelectedArtworkId(p.artworkId);
+                  setSelectedWallId(p.wallId);
+                }
+              }}
+              onChange={(observers) =>
+                commit({ ...scene, observers }, placements)
+              }
+              onEyeView={(id) =>
+                setObserverFocus((previous) => ({
+                  id,
+                  sequence: (previous?.sequence ?? 0) + 1,
+                }))
+              }
+            />
             {frameArt ? (
               <ArtworkFramePanel artwork={frameArt} onChange={updateFrame} />
             ) : (

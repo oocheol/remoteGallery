@@ -16,13 +16,14 @@ import {
   RotateCcw,
 } from "lucide-react";
 import * as THREE from "three";
+import { ObserverMesh } from "./ObserverMesh";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { Artwork, Placement, Scene, Vec3, Wall } from "@gallery/shared";
 import {
+  observerPose,
   artworkSize,
   artworkLayout,
   clampPlacement,
-  pointInPolygon,
   wallCoordinates,
   wallInwardNormal,
   wallLength,
@@ -40,16 +41,18 @@ export interface SceneCanvasProps {
   onWallSelect?: (wallId: string) => void;
   selectedWallId?: string;
   readOnly?: boolean;
-  view?: "orbit" | "top" | "walk";
-  onViewChange?: (view: "orbit" | "walk") => void;
+  view?: "orbit" | "top" | "free";
+  onViewChange?: (view: "orbit" | "free") => void;
+  observerFocus?: { id: string; sequence: number };
   showGuides?: boolean;
   onPointPick?: (point: Vec3) => void;
   calibrating?: boolean;
 }
 
-type CameraAction = "left" | "right" | "up" | "down" | "reset";
+type CameraAction =
+  "left" | "right" | "up" | "down" | "reset" | "forward" | "back";
 type CameraCommand = { sequence: number; action: CameraAction };
-type WalkTarget = { position: Vec3; direction: Vec3 };
+type CameraTarget = { position: Vec3; direction: Vec3; sequence?: number };
 
 class SceneBoundary extends React.Component<
   React.PropsWithChildren,
@@ -255,20 +258,21 @@ function CameraRig({
   dragging,
   bounds,
   command,
-  walkTarget,
+  freeTarget,
 }: {
   scene: Scene;
-  view: "orbit" | "top" | "walk";
+  view: "orbit" | "top" | "free";
   dragging: boolean;
   bounds: Bounds;
   command: CameraCommand | null;
-  walkTarget: WalkTarget | null;
+  freeTarget: CameraTarget | null;
 }) {
   const { camera, gl, size } = useThree();
   const controls = useRef<OrbitControlsImpl>(null);
   const handledCommand = useRef(0);
   const fittedLayout = useRef("");
   const keys = useRef(new Set<string>());
+  const appliedTarget = useRef<CameraTarget | null>(null);
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
@@ -279,7 +283,7 @@ function CameraRig({
       scene.floor.polygon,
       size.width,
       size.height,
-      view === "walk" ? walkTarget : null,
+      view === "free" ? freeTarget : null,
     ]);
     // Saving only artwork settings must not move the camera back to its initial angle.
     if (layout === fittedLayout.current) return;
@@ -313,31 +317,14 @@ function CameraRig({
         bounds.maxZ - bounds.minZ,
       ) / 2;
     const fitDistance = (Math.max(2, radius) / Math.sin(fitAngle)) * 1.08;
-    if (view === "walk") {
-      let x = center.x,
-        z = center.z;
-      if (
-        scene.floor.polygon.length &&
-        !pointInPolygon([x, z], scene.floor.polygon)
-      ) {
-        outer: for (let a = 0.1; a < 1; a += 0.1)
-          for (let b = 0.1; b < 1; b += 0.1) {
-            const xx = bounds.minX + (bounds.maxX - bounds.minX) * a,
-              zz = bounds.minZ + (bounds.maxZ - bounds.minZ) * b;
-            if (pointInPolygon([xx, zz], scene.floor.polygon)) {
-              x = xx;
-              z = zz;
-              break outer;
-            }
-          }
+    if (view === "free") {
+      const direction = camera.getWorldDirection(new THREE.Vector3());
+      if (freeTarget && appliedTarget.current !== freeTarget) {
+        camera.position.set(...freeTarget.position);
+        direction.set(...freeTarget.direction).normalize();
+        appliedTarget.current = freeTarget;
       }
-      const destination = walkTarget?.position ??
-        walkPosition(scene, [x, bounds.minY, z]) ?? [x, bounds.minY + 1.6, z];
-      const direction = walkTarget?.direction ?? [0, 0, -1];
-      camera.position.set(...(destination as Vec3));
-      c.target
-        .copy(camera.position)
-        .addScaledVector(new THREE.Vector3(...(direction as Vec3)), 0.001);
+      c.target.copy(camera.position).addScaledVector(direction, 0.001);
       keys.current.clear();
       gl.domElement.focus();
     } else if (view === "top") {
@@ -371,7 +358,7 @@ function CameraRig({
     scene.floor.polygon,
     size.width,
     size.height,
-    walkTarget,
+    freeTarget,
     gl,
   ]);
   useEffect(() => {
@@ -387,6 +374,22 @@ function CameraRig({
       c.update();
       c.reset();
       c.enableDamping = damping;
+    } else if (view === "free") {
+      const delta = new THREE.Vector3();
+      if (command.action === "forward" || command.action === "back")
+        camera
+          .getWorldDirection(delta)
+          .multiplyScalar(command.action === "forward" ? 0.4 : -0.4);
+      else if (command.action === "up" || command.action === "down")
+        delta.y = command.action === "up" ? 0.4 : -0.4;
+      else
+        delta
+          .setFromMatrixColumn(camera.matrixWorld, 0)
+          .multiplyScalar(command.action === "right" ? 0.4 : -0.4);
+      camera.position.add(delta);
+      c.target.add(delta);
+      c.update();
+      gl.domElement.focus();
     } else if (command.action === "left" || command.action === "right")
       c.setAzimuthalAngle(
         c.getAzimuthalAngle() + (command.action === "left" ? -step : step),
@@ -399,13 +402,17 @@ function CameraRig({
           c.maxPolarAngle,
         ),
       );
-  }, [command, dragging]);
+  }, [command, dragging, view, camera, gl]);
   useEffect(() => {
     const el = gl.domElement;
     el.tabIndex = 0;
     const down = (e: KeyboardEvent) => {
+      if (view !== "free" || e.ctrlKey || e.metaKey || e.altKey) return;
       if (
         [
+          "q",
+          "e",
+          "shift",
           "w",
           "a",
           "s",
@@ -430,18 +437,73 @@ function CameraRig({
       window.removeEventListener("keyup", up);
       el.removeEventListener("blur", clear);
     };
-  }, [gl]);
+  }, [gl, view]);
+  useEffect(() => {
+    if (view !== "free") return;
+    const el = gl.domElement;
+    let pan: { x: number; y: number } | null = null;
+    const moveBy = (delta: THREE.Vector3) => {
+      if (dragging || !controls.current) return;
+      camera.position.add(delta);
+      controls.current.target.add(delta);
+      controls.current.update();
+    };
+    const down = (e: PointerEvent) => {
+      if (e.button === 2) {
+        pan = { x: e.clientX, y: e.clientY };
+        el.focus();
+      }
+    };
+    const move = (e: PointerEvent) => {
+      if (!pan) return;
+      const right = new THREE.Vector3().setFromMatrixColumn(
+        camera.matrixWorld,
+        0,
+      );
+      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+      moveBy(
+        right
+          .multiplyScalar((pan.x - e.clientX) * 0.006)
+          .addScaledVector(up, (e.clientY - pan.y) * 0.006),
+      );
+      pan = { x: e.clientX, y: e.clientY };
+    };
+    const stop = () => {
+      pan = null;
+      keys.current.clear();
+    };
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      moveBy(
+        camera
+          .getWorldDirection(new THREE.Vector3())
+          .multiplyScalar(-Math.max(-250, Math.min(250, e.deltaY)) * 0.004),
+      );
+    };
+    el.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("blur", stop);
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      stop();
+      el.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("blur", stop);
+      el.removeEventListener("wheel", wheel);
+    };
+  }, [view, gl, camera, dragging]);
   useFrame((_, dt) => {
-    if (view !== "walk" || dragging || !controls.current || !keys.current.size)
+    if (view !== "free" || dragging || !controls.current || !keys.current.size)
       return;
     const k = keys.current,
       forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
-    forward.y = 0;
     forward.normalize();
-    const right = new THREE.Vector3().crossVectors(
-      forward,
-      new THREE.Vector3(0, 1, 0),
+    const right = new THREE.Vector3().setFromMatrixColumn(
+      camera.matrixWorld,
+      0,
     );
     const delta = forward
       .multiplyScalar(
@@ -454,35 +516,12 @@ function CameraRig({
             Number(k.has("a") || k.has("arrowleft")),
         ),
       );
+    delta.y += Number(k.has("e")) - Number(k.has("q"));
     if (!delta.lengthSq()) return;
-    delta.normalize().multiplyScalar(Math.min(dt, 0.05) * 1.8);
+    delta
+      .normalize()
+      .multiplyScalar(Math.min(dt, 0.05) * 1.8 * (k.has("shift") ? 3 : 1));
     const next = camera.position.clone().add(delta);
-    if (
-      scene.floor.polygon.length &&
-      !pointInPolygon([next.x, next.z], scene.floor.polygon)
-    )
-      return;
-    for (const wall of scene.walls) {
-      const dx = wall.end[0] - wall.start[0],
-        dz = wall.end[1] - wall.start[1],
-        l2 = dx * dx + dz * dz;
-      if (l2 === 0) continue;
-      const t = Math.max(
-        0,
-        Math.min(
-          1,
-          ((next.x - wall.start[0]) * dx + (next.z - wall.start[1]) * dz) / l2,
-        ),
-      );
-      if (
-        Math.hypot(
-          next.x - wall.start[0] - t * dx,
-          next.z - wall.start[1] - t * dz,
-        ) <
-        0.15 + wall.thickness / 2
-      )
-        return;
-    }
     camera.position.copy(next);
     controls.current.target.add(delta);
     controls.current.update();
@@ -495,12 +534,12 @@ function CameraRig({
       enableDamping
       dampingFactor={0.12}
       enableRotate={view !== "top"}
-      enablePan={view !== "walk"}
-      enableZoom={view !== "walk"}
-      minDistance={view === "walk" ? 0.001 : 0.15}
+      enablePan={view !== "free"}
+      enableZoom={view !== "free"}
+      minDistance={view === "free" ? 0.001 : 0.15}
       maxDistance={200}
-      minPolarAngle={view === "walk" ? Math.PI * 0.32 : 0.001}
-      maxPolarAngle={view === "walk" ? Math.PI * 0.68 : Math.PI * 0.95}
+      minPolarAngle={0.001}
+      maxPolarAngle={Math.PI - 0.001}
     />
   );
 }
@@ -748,8 +787,8 @@ function SparseCloud({
 function GalleryScene(
   props: SceneCanvasProps & {
     command: CameraCommand | null;
-    walkTarget: WalkTarget | null;
-    onEnterWalk: (target: WalkTarget) => void;
+    freeTarget: CameraTarget | null;
+    onEnterFree: (target: CameraTarget) => void;
   },
 ) {
   const {
@@ -761,7 +800,7 @@ function GalleryScene(
     showGuides = false,
   } = props;
   const { camera, gl } = useThree();
-  const enterWalk = (event: ThreeEvent<MouseEvent>, wallId?: string) => {
+  const enterFree = (event: ThreeEvent<MouseEvent>, wallId?: string) => {
     if (view !== "orbit" || props.calibrating) return;
     const point: Vec3 = [event.point.x, event.point.y, event.point.z];
     const position = walkPosition(scene, point, wallId);
@@ -773,7 +812,7 @@ function GalleryScene(
     direction.y = 0;
     if (direction.lengthSq() < 0.0001) direction.set(0, 0, -1);
     direction.normalize();
-    props.onEnterWalk({ position, direction: direction.toArray() as Vec3 });
+    props.onEnterFree({ position, direction: direction.toArray() as Vec3 });
   };
   const [draft, setDraft] = useState<Placement | null>(null),
     [cloudBounds, setCloudBounds] = useState<Bounds | null>(null);
@@ -893,7 +932,8 @@ function GalleryScene(
         : [placement.id],
     );
     props.onWallSelect?.(wall.id);
-    if (placement.locked || e.button !== 0 || e.shiftKey) return;
+    if (view === "free" || placement.locked || e.button !== 0 || e.shiftKey)
+      return;
     const normal = wallInwardNormal(wall, scene.floor.polygon),
       plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
         new THREE.Vector3(...normal),
@@ -941,7 +981,7 @@ function GalleryScene(
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, scene.floor.y - 0.012, 0]}
           receiveShadow
-          onDoubleClick={(e) => enterWalk(e)}
+          onDoubleClick={(e) => enterFree(e)}
           onPointerDown={(e) => {
             if (pick(e)) return;
             if (!props.readOnly && !e.shiftKey) props.onSelect?.([]);
@@ -966,7 +1006,7 @@ function GalleryScene(
             selected={props.selectedWallId === wall.id}
             view={view}
             showGuides={showGuides}
-            onDoubleClick={(e) => enterWalk(e, wall.id)}
+            onDoubleClick={(e) => enterFree(e, wall.id)}
             onDown={(e) => {
               e.stopPropagation();
               if (!pick(e) && !props.readOnly) props.onWallSelect?.(wall.id);
@@ -988,9 +1028,29 @@ function GalleryScene(
             scene={scene}
             selected={!props.readOnly && selectedIds.includes(p.id)}
             onDown={(e) => startDrag(e, p, artwork, wall)}
-            onDoubleClick={(e) => enterWalk(e, wall.id)}
+            onDoubleClick={(e) => enterFree(e, wall.id)}
           />
         );
+      })}
+      {(scene.observers ?? []).map((observer) => {
+        const placement = placements.find((p) => p.id === observer.placementId);
+        const artwork = artworks.find((a) => a.id === placement?.artworkId);
+        if (!placement || !artwork) return null;
+        const pose = observerPose(
+          scene,
+          draft?.id === placement.id ? draft : placement,
+          artwork,
+          observer.heightMm,
+        );
+        return pose ? (
+          <ObserverMesh
+            key={observer.id}
+            pose={pose}
+            heightMm={observer.heightMm}
+            selected={selectedIds.includes(placement.id)}
+            onSelect={() => props.onSelect?.([placement.id])}
+          />
+        ) : null;
       })}
       {scene.visual.kind === "sparse" && scene.visual.url && (
         <SparseCloud
@@ -1006,7 +1066,7 @@ function GalleryScene(
         dragging={!!draft}
         bounds={cloudBounds ?? baseBounds}
         command={props.command}
-        walkTarget={props.walkTarget}
+        freeTarget={props.freeTarget}
       />
     </>
   );
@@ -1014,7 +1074,41 @@ function GalleryScene(
 
 export default function SceneCanvas(props: SceneCanvasProps) {
   const [command, setCommand] = useState<CameraCommand | null>(null);
-  const [walkTarget, setWalkTarget] = useState<WalkTarget | null>(null);
+  const [freeTarget, setFreeTarget] = useState<CameraTarget | null>(null);
+  const focusedRequest = useRef(0);
+  useEffect(() => {
+    const request = props.observerFocus;
+    if (!request || focusedRequest.current === request.sequence) return;
+    const observer = props.scene.observers?.find((o) => o.id === request.id);
+    const placement = props.placements.find(
+      (p) => p.id === observer?.placementId,
+    );
+    const artwork = props.artworks.find((a) => a.id === placement?.artworkId);
+    if (!observer || !placement || !artwork) return;
+    const pose = observerPose(
+      props.scene,
+      placement,
+      artwork,
+      observer.heightMm,
+    );
+    if (!pose) return;
+    focusedRequest.current = request.sequence;
+    setFreeTarget({
+      position: pose.eye,
+      direction: new THREE.Vector3(...pose.target)
+        .sub(new THREE.Vector3(...pose.eye))
+        .normalize()
+        .toArray() as Vec3,
+      sequence: request.sequence,
+    });
+    props.onViewChange?.("free");
+  }, [
+    props.observerFocus,
+    props.scene,
+    props.placements,
+    props.artworks,
+    props.onViewChange,
+  ]);
   const rotate = (action: CameraAction) => {
     if (props.view === "top" && action !== "reset")
       props.onViewChange?.("orbit");
@@ -1057,15 +1151,15 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           <GalleryScene
             {...props}
             command={command}
-            walkTarget={walkTarget}
-            onEnterWalk={(target) => {
-              setWalkTarget(target);
-              props.onViewChange?.("walk");
+            freeTarget={freeTarget}
+            onEnterFree={(target) => {
+              setFreeTarget(target);
+              props.onViewChange?.("free");
             }}
           />
         </Canvas>
       </SceneBoundary>
-      {props.view !== "walk" && !props.calibrating && (
+      {props.view !== "free" && !props.calibrating && (
         <div className="scene-rotation" role="group" aria-label="도면 회전">
           <span className="scene-rotation-label">도면 회전</span>
           {(
@@ -1090,6 +1184,43 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           ))}
         </div>
       )}
+      {props.view === "free" && !props.calibrating && (
+        <div
+          role="group"
+          aria-label="자유 카메라 이동"
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 16,
+            background: "#fffffff0",
+            borderRadius: 10,
+            padding: 8,
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 4,
+          }}
+        >
+          {(
+            [
+              ["forward", "앞으로"],
+              ["up", "상승"],
+              ["back", "뒤로"],
+              ["left", "왼쪽"],
+              ["down", "하강"],
+              ["right", "오른쪽"],
+              ["reset", "시점 초기화"],
+            ] as const
+          ).map(([action, label]) => (
+            <button
+              key={action}
+              className="btn ghost"
+              onClick={() => rotate(action)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
@@ -1106,13 +1237,13 @@ export default function SceneCanvas(props: SceneCanvasProps) {
       >
         {props.calibrating
           ? "기준 거리의 두 지점을 클릭하세요"
-          : props.view === "walk"
-            ? "화면 클릭 후 WASD / 방향키로 이동 · 드래그로 둘러보기"
+          : props.view === "free"
+            ? "WASD 이동 · E 상승 / Q 하강 · Shift 빠르게 · 드래그로 시선 · 우클릭으로 이동 · 휠로 전후 이동"
             : props.readOnly
-              ? "더블클릭한 곳에서 보행 · 드래그로 회전 · 휠로 확대"
+              ? "더블클릭한 곳에서 자유 이동 · 드래그로 회전 · 휠로 확대"
               : props.view === "top"
                 ? "화살표 버튼으로 3D 회전 · 휠로 확대 · 우클릭 드래그로 이동"
-                : "더블클릭한 곳에서 보행 · 빈 공간 드래그로 회전 · 작품 드래그로 배치"}
+                : "더블클릭한 곳에서 자유 이동 · 빈 공간 드래그로 회전 · 작품 드래그로 배치"}
         {props.scene.visual.kind === "sparse" &&
           " · 희소 포인트 클라우드 — 벽·바닥 미추정"}
       </div>

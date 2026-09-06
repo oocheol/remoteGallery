@@ -46,3 +46,12 @@ Local-only application (loopback); links work on this running local server, not 
 - A shared layout calculation drives SVG preview, Three.js and collision bounds. UI limits and API validation prevent mat from consuming the image; material/frame width continue to work independently.
 - Geometry and live API tests cover fixed outer dimensions, reduced photo size, unchanged placement positions, invalid mat rejection, rollback, persistence and inset share snapshots. Legacy shares retain their earlier outset presentation.
 - Browser comparison: a 600×900mm input with a 20mm frame kept its 640×940mm external box at both 0mm and 50mm mat; photo changed from 600×900mm to 500×800mm. Keyboard save succeeded; browser reported no errors. Typecheck, 13 geometry tests, live frame API regression and production build passed.
+
+
+## Observers and free camera (2026-09-06)
+
+- Added actual-scale humanoids with custom height, approximate eye markers, a selected sight line and a 1m horizontal dimension. Browser checked 170cm creation, custom 180cm input, eye view, overhead free mode and vertical movement without browser errors.
+- Geometry tests cover heights 50/170/250cm, both wall directions, frame depth, elevated floors, exact horizontal distance and insufficient floor space. All 15 geometry tests pass.
+- `npx tsx tests/observer-flow.ts` passes isolated-gallery save/reload, height limits, duplicate/dangling reference validation, revision conflicts, immutable shares and observer cleanup after placement deletion.
+- Free mode replaces walking: preserves the current overview on entry, allows full camera-forward/sideways/vertical movement outside floor and wall boundaries, and offers mouse and on-screen controls. Orbit double-click still enters at the picked eye-level destination.
+- Typecheck and production build pass; the build retains the existing two dynamic-storage-path tracing warnings.

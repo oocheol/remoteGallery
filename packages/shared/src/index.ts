@@ -26,6 +26,8 @@ export type Calibration = {
   points?: [Vec3, Vec3];
 };
 
+export type Observer = { id: string; placementId: string; heightMm: number };
+
 export type Scene = {
   id: string;
   galleryId: string;
@@ -40,6 +42,7 @@ export type Scene = {
     url?: string;
     pointCount?: number;
   };
+  observers?: Observer[];
   warnings: string[];
 };
 
@@ -181,6 +184,16 @@ export const sceneSchema = z.object({
     url: z.string().optional(),
     pointCount: z.number().optional(),
   }),
+  observers: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        placementId: z.string().min(1),
+        heightMm: z.number().min(500).max(2500),
+      }),
+    )
+    .max(100)
+    .optional(),
   warnings: z.array(z.string()),
 });
 
