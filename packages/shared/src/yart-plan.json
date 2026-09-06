@@ -1,0 +1,210 @@
+{
+  "id": "scene-template",
+  "galleryId": "template",
+  "version": 1,
+  "name": "와이아트갤러리 · 실측 도면",
+  "kind": "measured-plan",
+  "walls": [
+    {
+      "id": "wall-1",
+      "name": "벽 1 · 3.85m",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        3.85,
+        0
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-2",
+      "name": "벽 2 · 1.70m",
+      "start": [
+        3.85,
+        0
+      ],
+      "end": [
+        3.85,
+        1.7
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-3",
+      "name": "벽 3 · 2.05m",
+      "start": [
+        3.85,
+        1.7
+      ],
+      "end": [
+        5.9,
+        1.7
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-4",
+      "name": "벽 4 · 1.75m",
+      "start": [
+        5.9,
+        1.7
+      ],
+      "end": [
+        5.9,
+        3.45
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-5",
+      "name": "벽 5 · 1.05m",
+      "start": [
+        5.9,
+        3.45
+      ],
+      "end": [
+        6.95,
+        3.45
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-6",
+      "name": "벽 6 · 4.90m",
+      "start": [
+        6.95,
+        3.45
+      ],
+      "end": [
+        6.95,
+        8.35
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-7",
+      "name": "벽 7 · 1.60m",
+      "start": [
+        6.95,
+        8.35
+      ],
+      "end": [
+        5.35,
+        8.35
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-8",
+      "name": "벽 8 · 2.80m",
+      "start": [
+        2.8,
+        8.35
+      ],
+      "end": [
+        0,
+        8.35
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-9",
+      "name": "벽 9 · 8.35m",
+      "start": [
+        0,
+        8.35
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    },
+    {
+      "id": "wall-10",
+      "name": "파티션 2.40m",
+      "start": [
+        2.8,
+        8.35
+      ],
+      "end": [
+        2.8,
+        5.95
+      ],
+      "height": 2.74,
+      "thickness": 0.1,
+      "estimated": true
+    }
+  ],
+  "floor": {
+    "polygon": [
+      [
+        0,
+        0
+      ],
+      [
+        3.85,
+        0
+      ],
+      [
+        3.85,
+        1.7
+      ],
+      [
+        5.9,
+        1.7
+      ],
+      [
+        5.9,
+        3.45
+      ],
+      [
+        6.95,
+        3.45
+      ],
+      [
+        6.95,
+        8.35
+      ],
+      [
+        0,
+        8.35
+      ]
+    ],
+    "y": 0
+  },
+  "calibration": {
+    "status": "plan",
+    "source": "IMG_4711.heic의 표기 치수 수동 전사 · 제공된 특정 도면 전용",
+    "scaleFactor": 1
+  },
+  "visual": {
+    "kind": "none"
+  },
+  "warnings": [
+    "사진 자동 복원이 아닌 제공 도면의 치수 기반 프록시입니다.",
+    "벽 길이와 높이 2.74m는 도면 표기값입니다. 벽 두께 0.10m는 추정치입니다.",
+    "입구 주변 x=2.80–5.35 구간은 설치 제외 영역입니다. 실제 문 폭·깊이·개폐 공간은 미확인입니다.",
+    "일반 도면 OCR 기능이 아닙니다. 다른 전시장 도면에는 이 어댑터를 사용하지 마세요."
+  ]
+}

@@ -1,32 +1,84 @@
-import { PGlite, type Transaction } from '@electric-sql/pglite';
+import { PGlite } from "@electric-sql/pglite";
 
-/**
- * The embedded database is intentionally opened only by the Next.js process.
- * The standalone worker communicates through internal HTTP routes, never this
- * module, because PGlite's on-disk store is single-process.
- */
-type DatabaseGlobal = typeof globalThis & { __galleryTwinDatabase?: Promise<PGlite> };
-const globalDatabase = globalThis as DatabaseGlobal;
-
-export type SqlDatabase = PGlite;
-
-export function databaseDirectory() {
-  return process.env.GALLERY_DB_DIR || '.gallery-twin/pglite';
+export interface SqlConnection {
+  query<T = Record<string, unknown>>(
+    sql: string,
+    params?: unknown[],
+  ): Promise<{ rows: T[]; affectedRows?: number }>;
+  exec(sql: string): Promise<unknown>;
 }
-
+export interface SqlDatabase extends SqlConnection {
+  transaction<T>(fn: (db: SqlConnection) => Promise<T>): Promise<T>;
+}
+type DatabaseGlobal = typeof globalThis & {
+  __galleryTwinDatabase?: Promise<SqlDatabase>;
+};
+const globalDatabase = globalThis as DatabaseGlobal;
+export function databaseDirectory() {
+  return process.env.GALLERY_DB_DIR || ".gallery-twin/pglite";
+}
 export async function getDatabase(): Promise<SqlDatabase> {
   if (!globalDatabase.__galleryTwinDatabase) {
     globalDatabase.__galleryTwinDatabase = (async () => {
+      if (process.env.GALLERY_CLOUD === "1") {
+        if (!process.env.DATABASE_URL)
+          throw new Error("DATABASE_URL is required in cloud mode");
+        const { Pool } = await import("pg");
+        const pool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          max: 3,
+          idleTimeoutMillis: 10000,
+          connectionTimeoutMillis: 15000,
+          allowExitOnIdle: true,
+        });
+        const db: SqlDatabase = {
+          query: async <T>(sql: string, params?: unknown[]) =>
+            ((r) => ({ rows: r.rows as T[], affectedRows: r.rowCount ?? 0 }))(
+              await pool.query(sql, params),
+            ),
+          exec: (sql) => pool.query(sql),
+          transaction: async (fn) => {
+            const client = await pool.connect();
+            try {
+              await client.query("BEGIN");
+              // Preserve local single-writer semantics across serverless instances.
+              await client.query("SELECT pg_advisory_xact_lock(71290461)");
+              const result = await fn({
+                query: async <T>(sql: string, params?: unknown[]) =>
+                  ((r) => ({
+                    rows: r.rows as T[],
+                    affectedRows: r.rowCount ?? 0,
+                  }))(await client.query(sql, params)),
+                exec: (sql) => client.query(sql),
+              });
+              await client.query("COMMIT");
+              return result;
+            } catch (error) {
+              await client.query("ROLLBACK");
+              throw error;
+            } finally {
+              client.release();
+            }
+          },
+        };
+        await db.transaction(async (connection) => {
+          await migrate(connection);
+        });
+        return db;
+      }
       const db = new PGlite(databaseDirectory());
       await db.waitReady;
       await migrate(db);
       return db;
-    })();
+    })().catch((error) => {
+      globalDatabase.__galleryTwinDatabase = undefined;
+      throw error;
+    });
   }
   return globalDatabase.__galleryTwinDatabase;
 }
 
-export async function migrate(db: SqlDatabase) {
+export async function migrate(db: SqlConnection) {
   await db.exec(`
     CREATE TABLE IF NOT EXISTS galleries (
       id TEXT PRIMARY KEY,
@@ -91,6 +143,9 @@ export async function migrate(db: SqlDatabase) {
       created_at TEXT NOT NULL,
       revoked_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS owner_sessions (
       token TEXT PRIMARY KEY,
       created_at TEXT NOT NULL,
@@ -99,7 +154,9 @@ export async function migrate(db: SqlDatabase) {
   `);
 }
 
-export async function withTransaction<T>(fn: (db: Transaction) => Promise<T>): Promise<T> {
+export async function withTransaction<T>(
+  fn: (db: SqlConnection) => Promise<T>,
+): Promise<T> {
   const db = await getDatabase();
   // Native PGlite transaction queues concurrent queries behind the callback.
   return db.transaction(fn);

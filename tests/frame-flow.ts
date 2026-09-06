@@ -12,7 +12,17 @@ import type {
 } from "@gallery/shared";
 
 const base = process.env.GALLERY_TEST_BASE_URL ?? "http://127.0.0.1:3000";
-const session = await fetch(base + "/api/session");
+const session = await fetch(
+  base + "/api/session",
+  process.env.GALLERY_TEST_PASSWORD
+    ? {
+        method: "POST",
+        headers: { Origin: base, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: process.env.GALLERY_TEST_PASSWORD }),
+      }
+    : undefined,
+);
+assert.equal(session.status, 200, "Owner login must succeed");
 const cookie = session.headers.get("set-cookie")!.split(";")[0];
 async function api<T>(
   path: string,

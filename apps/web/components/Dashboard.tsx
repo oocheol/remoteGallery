@@ -14,6 +14,7 @@ import type { Gallery, GalleryDetail, Job } from "@gallery/shared";
 import { api, ApiError, formatDate, jobLabel } from "@/lib/api";
 import { AppBrand } from "./AppBrand";
 
+const cloud = process.env.NEXT_PUBLIC_GALLERY_CLOUD === "1";
 type Pending = { id: string; job: Job };
 export function Dashboard() {
   const [galleries, setGalleries] = useState<Gallery[]>([]);
@@ -69,7 +70,16 @@ export function Dashboard() {
           address: address.trim() || undefined,
         }),
       });
-      if (files.length) {
+      if (cloud) {
+        await api("/api/jobs", {
+          method: "POST",
+          body: JSON.stringify({
+            galleryId: detail.gallery.id,
+            mode: "measured-plan",
+            assetIds: [],
+          }),
+        });
+      } else if (files.length) {
         const form = new FormData();
         form.set("galleryId", detail.gallery.id);
         form.set("role", "capture");
@@ -352,36 +362,48 @@ export function Dashboard() {
                   placeholder="서울 중구 …"
                 />
               </label>
-              <label className="field">
-                기록 방식
-                <select
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as typeof mode)}
-                >
-                  <option value="video">현장 영상</option>
-                  <option value="photos">현장 사진</option>
-                </select>
-              </label>
-              <label className="field">
-                파일{" "}
-                <span className="muted" style={{ fontWeight: 400 }}>
-                  (선택 — 공간만 먼저 만들 수 있습니다)
-                </span>
-                <input
-                  type="file"
-                  multiple
-                  accept={mode === "video" ? "video/*" : "image/*,.heic"}
-                  onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                />
-              </label>
-              <p
-                className="muted"
-                style={{ fontSize: 12, lineHeight: 1.5, margin: 0 }}
-              >
-                한 장의 사진이나 360° 이미지는 자동 공간 재구성을 지원하지
-                않습니다. 다양한 각도와 이동이 있는 기록을 사용하세요. 제공된
-                와이아트갤러리 도면은 별도 프로젝트로 준비됩니다.
-              </p>
+              {cloud ? (
+                <p className="notice">
+                  와이아트갤러리 실측 도면으로 새 전시를 만듭니다. 작품은 생성
+                  후 올릴 수 있습니다. 영상·사진 자동 복원은 로컬 앱에서 사용할
+                  수 있습니다.
+                </p>
+              ) : (
+                <>
+                  <label className="field">
+                    기록 방식
+                    <select
+                      value={mode}
+                      onChange={(e) => setMode(e.target.value as typeof mode)}
+                    >
+                      <option value="video">현장 영상</option>
+                      <option value="photos">현장 사진</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    파일{" "}
+                    <span className="muted" style={{ fontWeight: 400 }}>
+                      (선택 — 공간만 먼저 만들 수 있습니다)
+                    </span>
+                    <input
+                      type="file"
+                      multiple
+                      accept={mode === "video" ? "video/*" : "image/*,.heic"}
+                      onChange={(e) =>
+                        setFiles(Array.from(e.target.files || []))
+                      }
+                    />
+                  </label>
+                  <p
+                    className="muted"
+                    style={{ fontSize: 12, lineHeight: 1.5, margin: 0 }}
+                  >
+                    한 장의 사진이나 360° 이미지는 자동 공간 재구성을 지원하지
+                    않습니다. 다양한 각도와 이동이 있는 기록을 사용하세요.
+                    제공된 와이아트갤러리 도면은 별도 프로젝트로 준비됩니다.
+                  </p>
+                </>
+              )}
             </div>
             <div
               style={{

@@ -1,3 +1,4 @@
+import yartPlan from '@gallery/shared/yart-plan.json';
 import { randomUUID } from 'node:crypto';
 import { getDatabase, withTransaction, type SqlDatabase } from '@gallery/db';
 import type { Asset, Artwork, Exhibition, Gallery, GalleryDetail, Job, JobStatus, Placement, Scene } from '@gallery/shared';
@@ -90,11 +91,14 @@ export async function getJob(id: string) {
 }
 
 export async function createJob(input: { galleryId: string; mode: string; assetIds: string[] }) {
+  if (process.env.GALLERY_CLOUD === '1' && input.mode !== 'measured-plan') throw new ApiError(501, 'LOCAL_RECONSTRUCTION_REQUIRED', '영상·사진 자동 복원은 로컬 앱에서 사용할 수 있습니다.');
   const db = await getDatabase(); await getGallery(input.galleryId);
+  if (process.env.GALLERY_CLOUD === '1' && (await getGalleryDetail(input.galleryId)).scene) throw new ApiError(409, 'SCENE_EXISTS', '이미 공간이 준비된 프로젝트입니다.');
   const assets = await Promise.all(input.assetIds.map(getAssetRow));
   if (assets.some(asset => asset.gallery_id !== input.galleryId)) throw new ApiError(400, 'ASSET_GALLERY_MISMATCH', 'Assets must belong to this gallery');
   const id = randomUUID(); const timestamp = now();
   await db.query('INSERT INTO jobs(id,gallery_id,mode,asset_ids,status,progress,message,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,0,$6,$7,$7)', [id, input.galleryId, input.mode, JSON.stringify(input.assetIds), 'UPLOAD', 'Queued for processing', timestamp]);
+  if (process.env.GALLERY_CLOUD === '1') return commitWorkerReady(id, { scene: { ...structuredClone(yartPlan), id: `scene-${id}`, galleryId: input.galleryId }, message: '와이아트갤러리 실측 도면이 준비되었습니다.' });
   return getJob(id);
 }
 

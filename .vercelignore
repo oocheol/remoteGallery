@@ -1,0 +1,10 @@
+.gallery-twin/
+work/
+.env*
+*.mov
+*.heic
+*.mp4
+services/reconstruction/.venv/
+services/reconstruction/__pycache__/
+.agents/
+skills-lock.json

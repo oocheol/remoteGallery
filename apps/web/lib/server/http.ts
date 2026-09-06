@@ -18,7 +18,7 @@ export async function readJson(request: Request): Promise<unknown> {
   try { return await request.json(); } catch { throw new ApiError(400, 'INVALID_JSON', 'Expected a JSON request body'); }
 }
 
-/** Browser mutations are accepted only from this loopback app's own origin. */
+/** Browser mutations are accepted only from the app's own origin. */
 export function assertSameOrigin(request: NextRequest) {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
@@ -26,7 +26,7 @@ export function assertSameOrigin(request: NextRequest) {
   if (!origin || !host || fetchSite === 'cross-site') throw new ApiError(403, 'ORIGIN_REQUIRED', 'Same-origin request required');
   let parsed: URL;
   try { parsed = new URL(origin); } catch { throw new ApiError(403, 'ORIGIN_INVALID', 'Same-origin request required'); }
-  if (parsed.host !== host || !isLoopbackHost(parsed.hostname)) {
+  if (parsed.host !== host || (process.env.GALLERY_CLOUD !== '1' && !isLoopbackHost(parsed.hostname)) || (process.env.GALLERY_CLOUD === '1' && parsed.protocol !== 'https:' && !isLoopbackHost(parsed.hostname))) {
     throw new ApiError(403, 'ORIGIN_INVALID', 'Same-origin request required');
   }
 }

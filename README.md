@@ -10,7 +10,7 @@ Gallery Twin은 전시 공간을 직접 계측하고, 작품을 실제 벽에 �
 - 별도 Node worker가 큐를 가져가며 HTTP 요청 안에서 재구성 작업을 실행하지 않습니다.
 - `measured-plan`은 검토된 평면도 치수를 사용합니다. `video`/`photos`는 로컬 CPU SfM 의존성이 없거나 영상에 충분한 시차가 없으면 `FAILED`와 원인을 남겨야 합니다.
 - sparse point cloud는 photorealistic mesh 또는 Gaussian splat이 아닙니다. GPU 실행, 자동 벽 추정, 임의의 단일 이미지 방 추정은 이 저장소에서 주장하지 않습니다.
-- 데이터베이스와 원본 업로드는 로컬 디스크에 보관합니다. 배포, 다중 사용자 인증, 외부 GPU 작업, 외부 원본 업로드는 구성되어 있지 않습니다.
+- 로컬 모드는 PGlite와 로컬 디스크를 사용합니다. Vercel 모드는 Neon Postgres와 비공개 Vercel Blob을 사용하며 관리자 비밀번호로 편집 화면을 보호합니다. 공유 링크는 로그인 없이 읽기 전용으로 열 수 있습니다.
 
 ## 작품 배치와 액자 설정
 
@@ -37,7 +37,7 @@ uv venv services/reconstruction/.venv --python 3.11
 uv pip install --python services/reconstruction/.venv/bin/python -r services/reconstruction/requirements.txt
 ```
 
-FFmpeg와 FFprobe는 PATH에서 실행 가능해야 합니다. HEIC는 현재 macOS `sips`로 디코딩합니다. JPEG/PNG 작품은 Sharp에서 EXIF 방향을 적용하고 메타데이터를 제거하며 최대 4096px로 정규화합니다.
+FFmpeg와 FFprobe는 PATH에서 실행 가능해야 합니다. HEIC는 macOS에서 `sips`, Vercel Linux에서 `heic-convert`로 디코딩합니다. JPEG/PNG 작품은 Sharp에서 EXIF 방향을 적용하고 메타데이터를 제거하며 최대 4096px로 정규화합니다.
 
 `dev:local`은 `.env` 없이 사용할 수 있습니다. 웹과 worker에 같은 절대 저장 경로와 자동 생성된 `WORKER_TOKEN`을 전달합니다. 데이터는 `.gallery-twin/`에 저장합니다. 웹만 PGlite를 열고, worker는 내부 인증 HTTP 경로로 접근합니다. 별도 구성이 필요한 경우 `.env.example`의 변수 이름을 참고하세요.
 
@@ -124,3 +124,15 @@ API 테스트는 작은 embedded PNG를 사용하므로 외부 이미지 다운�
 **자유 모드**는 현재 카메라 위치에서 시작합니다. WASD/방향키로 이동, E 상승, Q 하강, Shift로 빠른 이동, 왼쪽 드래그로 시선 회전, 오른쪽 드래그로 화면 방향 이동, 휠로 전후 이동합니다. 화면의 이동 버튼도 사용할 수 있으며 벽과 바닥 경계에 이동 제한이 없습니다. 자유 모드에서도 작품을 드래그해 배치할 수 있습니다. 작품을 옮기는 동안에는 카메라 이동을 멈춥니다.
 
 자유 모드의 이동 키는 한글 입력 상태에서도 같은 키 위치로 작동합니다. 도구 버튼을 누른 뒤에도 바로 이동할 수 있으며, 입력칸을 편집하는 동안은 이동하지 않습니다. 상단의 **왼쪽/오른쪽 패널 숨기기**로 작업 영역을 넓히고, 3D 화면 오른쪽 위의 **조작 버튼 숨기기**로 방향 버튼을 감출 수 있습니다. 각 버튼으로 다시 펼칠 수 있습니다.
+
+## Vercel 배포
+
+- 프로젝트 루트: `apps/web`, Framework: Next.js, Node.js: 24.x.
+- Install Command: `npm install --prefix ../..`, Build Command: `npm run build`.
+- Neon Postgres와 **private** Vercel Blob 저장소를 프로젝트에 연결합니다.
+- Production/Preview 환경에 `GALLERY_CLOUD=1`, `NEXT_PUBLIC_GALLERY_CLOUD=1`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `GALLERY_ADMIN_PASSWORD_HASH`를 설정합니다. 관리자 비밀번호는 충분히 긴 임의 문자열로 만들고 SHA-256 hex 해시만 환경 변수에 저장합니다.
+- 저장소 루트에서 `vercel link` 후 `vercel --prod`로 배포합니다. 로컬 데이터와 원본 영상, 비밀번호는 Git이나 배포 파일에 포함하지 않습니다.
+- 클라우드에서 갤러리 생성, 와이아트갤러리 실측 도면 불러오기, 작품 업로드/배치, 액자/여백 설정, 관람자와 카메라 조작, 저장 및 읽기 전용 공유를 지원합니다.
+- 대용량 작품은 브라우저에서 비공개 Blob으로 직접 전송한 뒤 서버가 파일 형식을 확인하고 사진을 정규화합니다. Vercel 함수의 요청 본문 크기 제한을 피합니다.
+- 영상·사진 자동 복원은 Python 작업 프로세스가 있는 로컬 모드에서만 지원합니다. 클라우드에서는 지원되지 않는 복원 작업을 큐에 남기지 않고 명확히 거절합니다.
+- 로컬과 클라우드의 편집 내용은 자동 동기화되지 않습니다. 공유 링크도 생성한 환경에 속합니다.

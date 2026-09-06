@@ -86,3 +86,13 @@ Local-only application (loopback); links work on this running local server, not 
 - All 19 geometry tests pass. Asymmetric 700mm frame case verifies a 560×550mm image and +25mm vertical center offset for frame 20, side 50, top 30, bottom 80. Tests cover reversed margins, distinct width/height bounds and legacy symmetric fallback.
 - `npx tsx tests/frame-flow.ts` passes asymmetric save/reload, combined inset validation and immutable share checks, alongside the existing fixed-frame cases.
 - Browser verified side 40, top 30, bottom 120 on a 600×900mm frame: SVG photo x=60, y=50, width=480, height=710; preview and 3D show the larger bottom mat. Save succeeded without browser errors. Typecheck and build pass (existing storage tracing warnings remain).
+
+## Vercel 배포 검증 (2026-09-07)
+
+- Production: https://remotegallery.vercel.app — Neon Postgres + private Vercel Blob, 관리자 로그인.
+- 타입 검사, 단위 테스트 19개, 로컬 및 실제 배포 API의 액자·상하 여백 저장/재조회/충돌 방지/고정 공유 테스트 통과.
+- 기존 와이아트갤러리 도면, 작품 4점과 원본 파일 6개 이전. 편집 화면과 이미지 로딩, 비로그인 방문자 공유 화면을 브라우저에서 확인.
+- 7.7MB PNG를 브라우저에서 Blob multipart로 직접 업로드하고 서버 정규화 후 작품으로 등록하는 흐름 확인.
+- 클라우드 실측 도면 생성은 READY로 완료. Python이 필요한 영상·사진 복원은 명시적으로 지원 불가 응답을 반환.
+- Vercel 어댑터에서 빠지는 Next.js 16.3 서버 모듈을 outputFileTracingIncludes로 포함해 런타임 부팅 확인.
+- 검증 전용 갤러리는 사용자 갤러리와 분리해 생성하고 완료 후 정리.

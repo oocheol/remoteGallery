@@ -1583,6 +1583,12 @@ function CapturePanel({ galleryName }: { galleryName: string }) {
       setBusy(false);
     }
   }
+  if (process.env.NEXT_PUBLIC_GALLERY_CLOUD === "1")
+    return (
+      <p className="muted" style={{ fontSize: 11, marginTop: 20 }}>
+        영상·사진 자동 복원은 로컬 앱에서 사용할 수 있습니다.
+      </p>
+    );
   return (
     <section
       style={{
@@ -1667,6 +1673,47 @@ function ReconstructionPanel({
       setBusy(false);
     }
   }
+  if (process.env.NEXT_PUBLIC_GALLERY_CLOUD === "1")
+    return (
+      <section
+        className="card"
+        style={{ maxWidth: 640, margin: "80px auto", padding: 28 }}
+      >
+        <h1>전시 공간 준비</h1>
+        <p className="muted">
+          제공된 와이아트갤러리 실측 도면을 불러옵니다. 다른 전시장 도면이나
+          영상 자동 복원은 로컬 앱에서 준비해 주세요.
+        </p>
+        {error && <p className="notice">{error}</p>}
+        <button
+          className="btn primary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await api("/api/jobs", {
+                method: "POST",
+                body: JSON.stringify({
+                  galleryId,
+                  mode: "measured-plan",
+                  assetIds: [],
+                }),
+              });
+              await reload();
+            } catch (e) {
+              setError(
+                e instanceof Error ? e.message : "도면을 준비하지 못했습니다.",
+              );
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "준비 중…" : "와이아트갤러리 도면 사용"}
+        </button>
+      </section>
+    );
   const last = detail.jobs[0];
   return (
     <section style={{ maxWidth: 720, margin: "clamp(50px,10vw,130px) auto" }}>

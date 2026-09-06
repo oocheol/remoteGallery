@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { get, put } from "@vercel/blob";
 import {
   mkdir,
   readFile,
@@ -13,8 +14,8 @@ import { spawn } from "node:child_process";
 import { ApiError } from "./http";
 
 const roots = () => ({
-  storage: resolve(process.env.GALLERY_STORAGE_DIR || ".gallery-twin/storage"),
-  jobs: resolve(process.env.GALLERY_JOBS_DIR || ".gallery-twin/jobs"),
+  storage: resolve(process.env.GALLERY_CLOUD === "1" ? "/tmp/gallery-twin/storage" : (process.env.GALLERY_STORAGE_DIR || ".gallery-twin/storage")),
+  jobs: resolve(process.env.GALLERY_CLOUD === "1" ? "/tmp/gallery-twin/jobs" : (process.env.GALLERY_JOBS_DIR || ".gallery-twin/jobs")),
 });
 export const jobDirectory = (jobId: string) => safeJoin(roots().jobs, jobId);
 export const safeJoin = (root: string, ...parts: string[]) => {
@@ -100,11 +101,12 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
       let sourcePath = originalPath;
       const heicPath = safeJoin(dir, `${id}.decoded.jpg`);
       if (file.type === "image/heic" || file.type === "image/heif") {
-        await run(
-          "sips",
-          ["-s", "format", "jpeg", originalPath, "--out", heicPath],
-          30_000,
-        );
+        if (process.platform === "darwin") {
+          await run("sips", ["-s", "format", "jpeg", originalPath, "--out", heicPath], 30_000);
+        } else {
+          const convert = (await import("heic-convert")).default;
+          await writeFile(heicPath, await convert({ buffer: await readFile(originalPath), format: "JPEG", quality: 0.95 }));
+        }
         sourcePath = heicPath;
       }
       // Sharp strips EXIF/XMP/IPTC by default. Rotate from EXIF first, bound texture size.
@@ -121,13 +123,13 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
       await rm(originalPath);
       await rm(heicPath, { force: true });
       await rename(normalizedPath, finalPath);
-      return {
+      return await persistUpload(galleryId, {
         id,
         path: finalPath,
         name: safeName(file.name, ".jpg"),
         mimeType: "image/jpeg",
         size: (await readFile(finalPath)).byteLength,
-      };
+      });
     } catch {
       await Promise.all(
         [originalPath, normalizedPath, safeJoin(dir, `${id}.decoded.jpg`)].map(
@@ -141,13 +143,13 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
       );
     }
   }
-  return {
+  return persistUpload(galleryId, {
     id,
     path: originalPath,
     name: safeName(file.name, ext),
     mimeType: file.type,
     size: file.size,
-  };
+  });
 }
 
 export async function saveGeneratedFile(
@@ -201,7 +203,20 @@ export async function saveGeneratedFile(
   };
 }
 
+async function persistUpload(galleryId: string, record: { id: string; path: string; name: string; mimeType: string; size: number }) {
+  if (process.env.GALLERY_CLOUD !== "1") return record;
+  const blob = await put(`${galleryId}/${record.id}${extname(record.path)}`, await readFile(record.path), { access: "private", contentType: record.mimeType, addRandomSuffix: false });
+  await rm(record.path, { force: true });
+  return { ...record, path: `blob:${blob.pathname}` };
+}
+
 export async function readPrivateAsset(path: string) {
+  if (path.startsWith("blob:")) {
+    if (process.env.GALLERY_CLOUD !== "1") throw new ApiError(404, "ASSET_MISSING", "Cloud asset is not available locally");
+    const blob = await get(path.slice(5), { access: "private" });
+    if (!blob || blob.statusCode !== 200) throw new ApiError(404, "ASSET_MISSING", "Asset file is missing");
+    return blob.stream;
+  }
   const absolute = resolve(path);
   const { storage } = roots();
   if (relative(storage, absolute).startsWith(".."))

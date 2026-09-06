@@ -23,3 +23,5 @@ __pycache__/
 /*.mp4
 /*.heic
 /docs/*.png
+
+.vercel/
