@@ -328,7 +328,6 @@ a {
   display: block;
   width: 100%;
   height: 148px;
-  filter: drop-shadow(2px 4px 4px #0003);
 }
 .frame-options {
   display: grid;

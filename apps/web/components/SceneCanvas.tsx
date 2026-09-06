@@ -26,6 +26,7 @@ import {
   wallInwardNormal,
   wallLength,
   wallPoint,
+  walkPosition,
 } from "@gallery/three";
 
 export interface SceneCanvasProps {
@@ -39,7 +40,7 @@ export interface SceneCanvasProps {
   selectedWallId?: string;
   readOnly?: boolean;
   view?: "orbit" | "top" | "walk";
-  onViewChange?: (view: "orbit") => void;
+  onViewChange?: (view: "orbit" | "walk") => void;
   showGuides?: boolean;
   onPointPick?: (point: Vec3) => void;
   calibrating?: boolean;
@@ -47,6 +48,7 @@ export interface SceneCanvasProps {
 
 type CameraAction = "left" | "right" | "up" | "down" | "reset";
 type CameraCommand = { sequence: number; action: CameraAction };
+type WalkTarget = { position: Vec3; direction: Vec3 };
 
 class SceneBoundary extends React.Component<
   React.PropsWithChildren,
@@ -104,6 +106,7 @@ function ArtworkMesh({
   scene,
   selected,
   onDown,
+  onDoubleClick,
 }: {
   artwork: Artwork;
   placement: Placement;
@@ -111,6 +114,7 @@ function ArtworkMesh({
   scene: Scene;
   selected: boolean;
   onDown: (event: ThreeEvent<PointerEvent>) => void;
+  onDoubleClick: (event: ThreeEvent<MouseEvent>) => void;
 }) {
   const texture = useArtworkTexture(artwork.imageUrl);
   const woodTexture = useMemo(() => {
@@ -158,8 +162,9 @@ function ArtworkMesh({
       <group
         rotation={[0, 0, (placement.rotation * direction * Math.PI) / 180]}
         onPointerDown={onDown}
+        onDoubleClick={onDoubleClick}
       >
-        <mesh castShadow>
+        <mesh>
           <boxGeometry args={[width, height, depth]} />
           <meshStandardMaterial
             key={inset > 0 ? (woodTexture?.uuid ?? "black-frame") : "no-frame"}
@@ -178,7 +183,13 @@ function ArtworkMesh({
                 (artwork.heightMm + 2 * (artwork.matWidthMm ?? 0)) / 1000,
               ]}
             />
-            <meshStandardMaterial color="#faf8f2" roughness={0.95} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+            <meshStandardMaterial
+              color="#faf8f2"
+              roughness={0.95}
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
+            />
           </mesh>
         )}
         <mesh position={[0, 0, depth / 2 + 0.002]}>
@@ -245,12 +256,14 @@ function CameraRig({
   dragging,
   bounds,
   command,
+  walkTarget,
 }: {
   scene: Scene;
   view: "orbit" | "top" | "walk";
   dragging: boolean;
   bounds: Bounds;
   command: CameraCommand | null;
+  walkTarget: WalkTarget | null;
 }) {
   const { camera, gl, size } = useThree();
   const controls = useRef<OrbitControlsImpl>(null);
@@ -267,10 +280,14 @@ function CameraRig({
       scene.floor.polygon,
       size.width,
       size.height,
+      view === "walk" ? walkTarget : null,
     ]);
     // Saving only artwork settings must not move the camera back to its initial angle.
     if (layout === fittedLayout.current) return;
     fittedLayout.current = layout;
+    const damping = c.enableDamping;
+    c.enableDamping = false;
+    c.update();
     const center = new THREE.Vector3(
       (bounds.minX + bounds.maxX) / 2,
       bounds.minY,
@@ -315,8 +332,15 @@ function CameraRig({
             }
           }
       }
-      camera.position.set(x, bounds.minY + 1.6, z);
-      c.target.set(x, bounds.minY + 1.6, z - 0.001);
+      const destination = walkTarget?.position ??
+        walkPosition(scene, [x, bounds.minY, z]) ?? [x, bounds.minY + 1.6, z];
+      const direction = walkTarget?.direction ?? [0, 0, -1];
+      camera.position.set(...(destination as Vec3));
+      c.target
+        .copy(camera.position)
+        .addScaledVector(new THREE.Vector3(...(direction as Vec3)), 0.001);
+      keys.current.clear();
+      gl.domElement.focus();
     } else if (view === "top") {
       camera.position.set(
         center.x,
@@ -339,6 +363,7 @@ function CameraRig({
     camera.updateProjectionMatrix();
     c.update();
     c.saveState();
+    c.enableDamping = damping;
   }, [
     camera,
     view,
@@ -347,6 +372,8 @@ function CameraRig({
     scene.floor.polygon,
     size.width,
     size.height,
+    walkTarget,
+    gl,
   ]);
   useEffect(() => {
     const c = controls.current;
@@ -485,6 +512,7 @@ function WallMesh({
   selected,
   view,
   onDown,
+  onDoubleClick,
   showGuides,
 }: {
   wall: Wall;
@@ -492,6 +520,7 @@ function WallMesh({
   selected: boolean;
   view: string;
   onDown: (event: ThreeEvent<PointerEvent>) => void;
+  onDoubleClick: (event: ThreeEvent<MouseEvent>) => void;
   showGuides: boolean;
 }) {
   const normal = wallInwardNormal(wall, scene.floor.polygon),
@@ -519,6 +548,10 @@ function WallMesh({
         onPointerDown={(e) => {
           if (view !== "top" && (material.current?.opacity ?? 1) < 0.2) return;
           onDown(e);
+        }}
+        onDoubleClick={(e) => {
+          if ((material.current?.opacity ?? 1) < 0.2) return;
+          onDoubleClick(e);
         }}
       >
         <boxGeometry
@@ -714,7 +747,11 @@ function SparseCloud({
 }
 
 function GalleryScene(
-  props: SceneCanvasProps & { command: CameraCommand | null },
+  props: SceneCanvasProps & {
+    command: CameraCommand | null;
+    walkTarget: WalkTarget | null;
+    onEnterWalk: (target: WalkTarget) => void;
+  },
 ) {
   const {
     scene,
@@ -725,6 +762,20 @@ function GalleryScene(
     showGuides = false,
   } = props;
   const { camera, gl } = useThree();
+  const enterWalk = (event: ThreeEvent<MouseEvent>, wallId?: string) => {
+    if (view !== "orbit" || props.calibrating) return;
+    const point: Vec3 = [event.point.x, event.point.y, event.point.z];
+    const position = walkPosition(scene, point, wallId);
+    if (!position) return;
+    event.stopPropagation();
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    if (wallId)
+      direction.set(point[0] - position[0], 0, point[2] - position[2]);
+    direction.y = 0;
+    if (direction.lengthSq() < 0.0001) direction.set(0, 0, -1);
+    direction.normalize();
+    props.onEnterWalk({ position, direction: direction.toArray() as Vec3 });
+  };
   const [draft, setDraft] = useState<Placement | null>(null),
     [cloudBounds, setCloudBounds] = useState<Bounds | null>(null);
   const baseBounds = useMemo(() => getBounds(scene), [scene]);
@@ -891,6 +942,7 @@ function GalleryScene(
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, scene.floor.y - 0.012, 0]}
           receiveShadow
+          onDoubleClick={(e) => enterWalk(e)}
           onPointerDown={(e) => {
             if (pick(e)) return;
             if (!props.readOnly && !e.shiftKey) props.onSelect?.([]);
@@ -915,6 +967,7 @@ function GalleryScene(
             selected={props.selectedWallId === wall.id}
             view={view}
             showGuides={showGuides}
+            onDoubleClick={(e) => enterWalk(e, wall.id)}
             onDown={(e) => {
               e.stopPropagation();
               if (!pick(e) && !props.readOnly) props.onWallSelect?.(wall.id);
@@ -936,6 +989,7 @@ function GalleryScene(
             scene={scene}
             selected={!props.readOnly && selectedIds.includes(p.id)}
             onDown={(e) => startDrag(e, p, artwork, wall)}
+            onDoubleClick={(e) => enterWalk(e, wall.id)}
           />
         );
       })}
@@ -953,6 +1007,7 @@ function GalleryScene(
         dragging={!!draft}
         bounds={cloudBounds ?? baseBounds}
         command={props.command}
+        walkTarget={props.walkTarget}
       />
     </>
   );
@@ -960,6 +1015,7 @@ function GalleryScene(
 
 export default function SceneCanvas(props: SceneCanvasProps) {
   const [command, setCommand] = useState<CameraCommand | null>(null);
+  const [walkTarget, setWalkTarget] = useState<WalkTarget | null>(null);
   const rotate = (action: CameraAction) => {
     if (props.view === "top" && action !== "reset")
       props.onViewChange?.("orbit");
@@ -999,7 +1055,15 @@ export default function SceneCanvas(props: SceneCanvasProps) {
             gl.toneMappingExposure = 1.05;
           }}
         >
-          <GalleryScene {...props} command={command} />
+          <GalleryScene
+            {...props}
+            command={command}
+            walkTarget={walkTarget}
+            onEnterWalk={(target) => {
+              setWalkTarget(target);
+              props.onViewChange?.("walk");
+            }}
+          />
         </Canvas>
       </SceneBoundary>
       {props.view !== "walk" && !props.calibrating && (
@@ -1046,10 +1110,10 @@ export default function SceneCanvas(props: SceneCanvasProps) {
           : props.view === "walk"
             ? "화면 클릭 후 WASD / 방향키로 이동 · 드래그로 둘러보기"
             : props.readOnly
-              ? "드래그 / 화살표 버튼으로 회전 · 휠로 확대"
+              ? "더블클릭한 곳에서 보행 · 드래그로 회전 · 휠로 확대"
               : props.view === "top"
                 ? "화살표 버튼으로 3D 회전 · 휠로 확대 · 우클릭 드래그로 이동"
-                : "빈 공간 드래그 / 화살표 버튼으로 회전 · 휠로 확대 · 작품 드래그로 배치"}
+                : "더블클릭한 곳에서 보행 · 빈 공간 드래그로 회전 · 작품 드래그로 배치"}
         {props.scene.visual.kind === "sparse" &&
           " · 희소 포인트 클라우드 — 벽·바닥 미추정"}
       </div>

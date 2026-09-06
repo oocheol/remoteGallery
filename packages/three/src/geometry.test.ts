@@ -14,6 +14,7 @@ import {
   wallInwardNormal,
   wallLength,
   wallPoint,
+  walkPosition,
 } from "./index";
 const wall: Wall = {
   id: "wall",
@@ -44,6 +45,60 @@ const placement: Placement = {
   rotation: 0,
   locked: false,
 };
+
+describe("walking destinations", () => {
+  const polygon: [number, number][] = [
+    [0, 0],
+    [4, 0],
+    [4, 4],
+    [0, 4],
+  ];
+  const room = (): Scene => ({
+    ...scene,
+    floor: { polygon, y: 0.3 },
+    walls: polygon.map((start, i) => ({
+      ...wall,
+      id: `edge-${i}`,
+      start,
+      end: polygon[(i + 1) % polygon.length],
+    })),
+  });
+  it("uses the clicked floor position at eye level and stands inward from walls", () => {
+    const floor = walkPosition(room(), [2, 0.3, 2])!;
+    expect([floor[0], floor[2]]).toEqual([2, 2]);
+    expect(floor[1]).toBeCloseTo(1.9);
+    const destination = walkPosition(room(), [2, 1.4, 0], "edge-0")!;
+    expect(destination[0]).toBe(2);
+    expect(destination[1]).toBeCloseTo(1.9);
+    expect(destination[2]).toBeCloseTo(1.56);
+    expect(pointInPolygon([destination[0], destination[2]], polygon)).toBe(
+      true,
+    );
+  });
+  it("adjusts corner picks away from both walls and rejects unusable spaces", () => {
+    const corner = walkPosition(room(), [0, 0, 0])!;
+    expect(corner[0]).toBeGreaterThanOrEqual(0.26);
+    expect(corner[2]).toBeGreaterThanOrEqual(0.26);
+    expect(
+      walkPosition(
+        {
+          ...room(),
+          floor: {
+            polygon: [
+              [0, 0],
+              [0.1, 0],
+              [0.1, 0.1],
+              [0, 0.1],
+            ],
+            y: 0,
+          },
+        },
+        [0, 0, 0],
+      ),
+    ).toBeNull();
+    expect(walkPosition(room(), [NaN, 0, 0])).toBeNull();
+  });
+});
 const scene: Scene = {
   id: "scene",
   galleryId: "gallery",

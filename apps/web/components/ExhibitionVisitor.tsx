@@ -134,6 +134,7 @@ export function ExhibitionVisitor({ token }: { token: string }) {
             }
             readOnly
             view={view}
+            onViewChange={setView}
             showGuides={false}
           />
           <div

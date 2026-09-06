@@ -35,3 +35,8 @@ Local-only application (loopback); links work on this running local server, not 
 - Browser confirmed live wood rendering, 50mm mat, undo to 30mm, redo, and keyboard save in a separate test gallery.
 - Editor now shows a three-step workflow, selected wall, visible view controls, explicit placement buttons and save state. Wall geometry and recapture controls are collapsed. Save preserves the camera angle when geometry is unchanged.
 - Final typecheck, 10 geometry tests, existing live API workflow, dedicated frame API workflow and production build passed. A 390px editor viewport has a 390px document with no horizontal overflow. Wood and black render in both the front preview and the shared Three.js renderer; removed frame self-shadow artifacts.
+
+## Double-click walking and shadow update
+- Artwork/frame meshes no longer cast wall shadows; the front preview drop shadow is also removed.
+- In orbit mode, double-clicking floor, wall or artwork switches editor/visitor to eye-level walking near the picked point. Wall picks face the wall from the interior; floor picks retain horizontal viewing direction. Wall and polygon clearance are checked, and calibration mode ignores this navigation gesture.
+- Browser verified floor double-click, artwork selection followed by double-click, active walking mode and canvas keyboard focus. New geometry tests cover exact floor coordinates, eye height, inward wall offsets, corner clearance and unusable destinations.

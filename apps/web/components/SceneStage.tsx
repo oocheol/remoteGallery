@@ -29,7 +29,7 @@ export function SceneStage(props: {
   selectedWallId?: string;
   readOnly?: boolean;
   view?: "orbit" | "top" | "walk";
-  onViewChange?: (view: "orbit") => void;
+  onViewChange?: (view: "orbit" | "walk") => void;
   showGuides?: boolean;
   onPointPick?: (point: Vec3) => void;
   calibrating?: boolean;

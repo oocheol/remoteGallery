@@ -8,6 +8,59 @@ import type {
 } from "@gallery/shared";
 
 const EPS = 1e-7;
+
+/** Eye-level destination near a picked surface, with clearance from every wall. */
+export function walkPosition(
+  scene: Scene,
+  point: Vec3,
+  wallId?: string,
+): Vec3 | null {
+  if (!point.every(Number.isFinite)) return null;
+  const wall = scene.walls.find((w) => w.id === wallId);
+  const normal = wall ? wallInwardNormal(wall, scene.floor.polygon) : [0, 0, 0];
+  const offset = wall ? wall.thickness / 2 + 1.5 : 0;
+  const origin: Vec2 = [
+    point[0] + normal[0] * offset,
+    point[2] + normal[2] * offset,
+  ];
+  const clear = ([x, z]: Vec2) => {
+    if (
+      scene.floor.polygon.length >= 3 &&
+      !pointInPolygon([x, z], scene.floor.polygon)
+    )
+      return false;
+    return scene.walls.every((w) => {
+      const dx = w.end[0] - w.start[0],
+        dz = w.end[1] - w.start[1];
+      const lengthSq = dx * dx + dz * dz;
+      const t = lengthSq
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              ((x - w.start[0]) * dx + (z - w.start[1]) * dz) / lengthSq,
+            ),
+          )
+        : 0;
+      return (
+        Math.hypot(x - w.start[0] - t * dx, z - w.start[1] - t * dz) >=
+        0.2 + w.thickness / 2
+      );
+    });
+  };
+  for (const radius of [0, 0.25, 0.5, 0.75, 1, 1.5, 2]) {
+    for (let i = 0; i < (radius ? 32 : 1); i++) {
+      const angle = (i * Math.PI) / 16;
+      const candidate: Vec2 = [
+        origin[0] + Math.cos(angle) * radius,
+        origin[1] + Math.sin(angle) * radius,
+      ];
+      if (clear(candidate))
+        return [candidate[0], scene.floor.y + 1.6, candidate[1]];
+    }
+  }
+  return null;
+}
 export function wallLength(wall: Wall): number {
   return Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]);
 }
