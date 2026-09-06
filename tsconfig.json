@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "es2022"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@gallery/shared": ["./packages/shared/src/index.ts"],
+      "@gallery/shared/*": ["./packages/shared/src/*"],
+      "@gallery/db": ["./packages/db/src/index.ts"],
+      "@gallery/db/*": ["./packages/db/src/*"],
+      "@gallery/three": ["./packages/three/src/index.ts"],
+      "@gallery/three/*": ["./packages/three/src/*"],
+      "@/*": ["./apps/web/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "scripts/**/*.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

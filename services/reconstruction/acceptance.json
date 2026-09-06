@@ -1,0 +1,34 @@
+{
+  "verifiedAt": "2026-09-06",
+  "source": "IMG_3415.mov",
+  "status": "READY",
+  "elapsedSeconds": 30.516,
+  "selection": {
+    "candidates": 40,
+    "accepted": 40,
+    "rejected": 0
+  },
+  "reconstruction": {
+    "pycolmapVersion": "4.2.0",
+    "models": [
+      {
+        "id": 0,
+        "registeredImages": 4,
+        "points": 401,
+        "meanReprojectionError": 0.5777439310696404
+      },
+      {
+        "id": 1,
+        "registeredImages": 40,
+        "points": 3722,
+        "meanReprojectionError": 0.47810043658959145
+      }
+    ]
+  },
+  "registrationRatio": 1.0,
+  "exportedPoints": 3567,
+  "calibration": "uncalibrated",
+  "wallInference": false,
+  "floorInference": false,
+  "planAreaM2": 50.925
+}

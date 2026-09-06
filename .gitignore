@@ -1,0 +1,25 @@
+node_modules/
+.next/
+.gallery-twin/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+data/
+uploads/
+*.log
+.DS_Store
+
+work/
+*.tsbuildinfo
+__pycache__/
+.venv/
+
+# Local source captures and verification images
+/*.mov
+/*.mp4
+/*.heic
+/docs/*.png
