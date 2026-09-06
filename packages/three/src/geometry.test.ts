@@ -158,10 +158,10 @@ describe("physical bounds and calibration", () => {
     const matted = { ...art, matWidthMm: 50, frameMaterial: "wood" as const };
     expect(artworkSize(matted)).toEqual(artworkSize(art));
     expect(artworkLayout(matted)).toMatchObject({
-      imageWidthMm: 500,
-      imageHeightMm: 300,
-      boardWidthMm: 600,
-      boardHeightMm: 400,
+      imageWidthMm: 450,
+      imageHeightMm: 250,
+      boardWidthMm: 550,
+      boardHeightMm: 350,
     });
     expect(validatePlacement({ ...placement, u: 0.34 }, matted, wall)).toEqual(
       [],
@@ -170,11 +170,16 @@ describe("physical bounds and calibration", () => {
     expect(findCollisions(pair, [matted], [wall])).toHaveLength(0);
     expect(clampPlacement(placement, matted, wall)).toEqual(placement);
     expect(validArtworkMat({ ...art, matWidthMm: 200 })).toBe(false);
-    expect(validArtworkMat({ ...art, matWidthMm: 199 })).toBe(true);
-    expect(artworkLayout({ ...art, matWidthMm: 0 }).imageWidthMm).toBe(600);
+    expect(validArtworkMat({ ...art, matWidthMm: 174.5 })).toBe(true);
+    expect(artworkLayout({ ...art, matWidthMm: 0 }).imageWidthMm).toBe(550);
   });
   it("preserves the old outside-mat layout in immutable legacy shares", () => {
-    const legacy = { ...art, matWidthMm: 50, matSizing: "outset" as const };
+    const legacy = {
+      ...art,
+      matWidthMm: 50,
+      matSizing: "outset" as const,
+      frameSizing: "outset" as const,
+    };
     expect(artworkSize(legacy)).toEqual({
       width: 0.75,
       height: 0.55,
@@ -184,15 +189,15 @@ describe("physical bounds and calibration", () => {
   });
   it("includes the full frame, clamps center, and rejects oversized work", () => {
     expect(artworkSize(art)).toEqual({
-      width: 0.65,
-      height: 0.45,
+      width: 0.6,
+      height: 0.4,
       depth: 0.035,
     });
     const clamped = clampPlacement({ ...placement, u: -10, v: 100 }, art, wall);
-    expect(clamped.u).toBe(0.325);
-    expect(clamped.v).toBeCloseTo(2.515);
+    expect(clamped.u).toBe(0.3);
+    expect(clamped.v).toBeCloseTo(2.54);
     expect(validatePlacement(clamped, art, wall)).toEqual([]);
-    expect(validatePlacement({ ...placement, u: 0.3 }, art, wall)).toContain(
+    expect(validatePlacement({ ...placement, u: 0.29 }, art, wall)).toContain(
       "Artwork frame exceeds wall width",
     );
     expect(
@@ -205,10 +210,10 @@ describe("physical bounds and calibration", () => {
   });
   it("accounts for rotated outer corners at the wall boundary", () => {
     const [x, y] = placementExtents(art, 90);
-    expect(x).toBeCloseTo(0.225);
-    expect(y).toBeCloseTo(0.325);
+    expect(x).toBeCloseTo(0.2);
+    expect(y).toBeCloseTo(0.3);
     expect(
-      validatePlacement({ ...placement, rotation: 90, v: 0.3 }, art, wall),
+      validatePlacement({ ...placement, rotation: 90, v: 0.29 }, art, wall),
     ).toContain("Artwork frame exceeds wall height");
   });
   it("scales geometry and positions but preserves physical artwork millimeters", () => {
@@ -254,14 +259,14 @@ describe("collisions and layout", () => {
   it("finds actual frame overlaps but allows touching frames and ignores other walls", () => {
     expect(
       findCollisions(
-        [placement, { ...placement, id: "p2", u: 2.6 }],
+        [placement, { ...placement, id: "p2", u: 2.59 }],
         [art],
         [wall],
       ),
     ).toEqual(["p overlaps p2"]);
     expect(
       findCollisions(
-        [placement, { ...placement, id: "p2", u: 2.65 }],
+        [placement, { ...placement, id: "p2", u: 2.6 }],
         [art],
         [wall],
       ),
@@ -402,5 +407,51 @@ describe("observer scale and viewing distance", () => {
     expect(
       Math.hypot(pose.eye[0] - pose.target[0], pose.eye[2] - pose.target[2]),
     ).toBeCloseTo(1);
+  });
+});
+
+describe("fixed entered outer dimensions", () => {
+  it("keeps a 700mm frame fixed while frame and mat consume the photo, including no frame", () => {
+    for (const frameWidthMm of [0, 20, 100]) {
+      const square = {
+        ...art,
+        widthMm: 700,
+        heightMm: 700,
+        frameWidthMm,
+        matWidthMm: 50,
+      };
+      expect(artworkSize(square)).toMatchObject({ width: 0.7, height: 0.7 });
+      expect(artworkLayout(square).imageWidthMm).toBe(600 - 2 * frameWidthMm);
+      expect(artworkLayout(square).imageHeightMm).toBe(600 - 2 * frameWidthMm);
+      const atEdge = { ...placement, u: 0.35, v: 0.35 };
+      expect(clampPlacement(atEdge, square, wall)).toEqual(atEdge);
+      expect(
+        findCollisions(
+          [atEdge, { ...atEdge, id: "next", u: 1.05 }],
+          [square],
+          [wall],
+        ),
+      ).toEqual([]);
+    }
+  });
+  it("validates the combined frame and mat and keeps legacy inset-mat shares unchanged", () => {
+    expect(validArtworkMat({ ...art, frameWidthMm: 175, matWidthMm: 25 })).toBe(
+      false,
+    );
+    expect(
+      validArtworkMat({ ...art, frameWidthMm: 175, matWidthMm: 24.5 }),
+    ).toBe(true);
+    const legacy = {
+      ...art,
+      frameSizing: "outset" as const,
+      matSizing: "inset" as const,
+      matWidthMm: 50,
+    };
+    expect(artworkLayout(legacy)).toMatchObject({
+      widthMm: 650,
+      heightMm: 450,
+      imageWidthMm: 500,
+      imageHeightMm: 300,
+    });
   });
 });

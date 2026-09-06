@@ -58,7 +58,9 @@ export type Artwork = {
   frameWidthMm: number;
   frameDepthMm: number;
   frameMaterial?: "wood" | "black";
-  /** Inset mat on each side of the fixed, originally entered image area. */
+  /** Entered width/height include the frame unless loading a legacy share. */
+  frameSizing?: "inset" | "outset";
+  /** Mat on each side, inside the frame opening. */
   matWidthMm?: number;
   /** Outset is retained only for immutable shares created before inset sizing. */
   matSizing?: "inset" | "outset";
@@ -211,6 +213,7 @@ export const artworkSchema = z.object({
   frameMaterial: z.enum(["wood", "black"]).default("black"),
   matWidthMm: z.number().min(0).max(1000).default(0),
   matSizing: z.enum(["inset", "outset"]).optional(),
+  frameSizing: z.enum(["inset", "outset"]).optional(),
 });
 
 export const artworkStyleSchema = z

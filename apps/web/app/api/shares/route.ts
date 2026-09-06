@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
         .map((art) => ({
           ...art,
           matSizing: "inset" as const,
+          frameSizing: "inset" as const,
           imageUrl: rewrite(art.imageUrl) || "",
         })),
       galleryName: detail.gallery.name,

@@ -69,3 +69,12 @@ Local-only application (loopback); links work on this running local server, not 
 - Browser checks cover all six WASD/E/Q keys with Korean key values and a focused toolbar button, including after an artwork drag. Camera motion is verified by comparing rendered scene pixels; typing into the height field leaves the camera still.
 - Left and right editor panels hide independently, expanding the canvas. Rotation/movement controls can be hidden and restored separately. Checked hide/show and retained scene rendering. Typecheck and production build pass (existing storage tracing warnings remain).
 - Reproduce keyboard and panel checks: `npx tsx tests/observer-flow.ts`, then `node tests/browser-camera-controls.mjs`. The test uses an isolated fixture and writes screenshots under ignored `work/camera-controls/`.
+
+
+## Fixed outer frame dimensions (2026-09-06)
+
+- Entered artwork width/height now include the frame. Both frame and mat subtract from the photo while outer dimensions, placement centers, edge clearance and inter-artwork spacing stay fixed. Upload and frame-panel text describe this convention; frame and mat inputs constrain their combined inset.
+- All 17 geometry tests pass, including a 700×700mm square with variable frames, exact wall-edge/touching placements, combined frame/mat limits, rotated outer bounds and both legacy share layouts.
+- `npx tsx tests/frame-flow.ts` passes save/reload, fixed outer extents at touching positions, combined-inset rejection/rollback, stale revision and immutable new shares.
+- Browser verified 700×700mm with frame 20mm + mat 50mm -> photo 560×560mm; frame 60mm + mat 50mm -> photo 480×480mm. SVG outer viewBox remained 700×700; 3D outer size and position stayed fixed, wood material and save worked without browser errors.
+- Typecheck and production build pass (existing storage tracing warnings remain).

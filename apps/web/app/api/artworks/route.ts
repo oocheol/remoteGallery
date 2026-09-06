@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
           : (body.frameMaterial as Artwork["frameMaterial"]),
       matWidthMm: numeric(body.matWidthMm, "matWidthMm", false),
       matSizing: "inset",
+      frameSizing: "inset",
     };
     if (!["wood", "black"].includes(artwork.frameMaterial!))
       throw new ApiError(
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       throw new ApiError(
         400,
         "INVALID_ARTWORK_MAT",
-        "여백이 입력한 작품 크기보다 큽니다.",
+        "프레임과 여백을 제외한 사진 영역이 최소 1mm 남아야 합니다.",
       );
     return NextResponse.json(await createArtwork(artwork), { status: 201 });
   } catch (error) {

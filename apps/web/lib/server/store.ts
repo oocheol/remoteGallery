@@ -156,8 +156,8 @@ export async function updateScene(galleryId: string, input: { scene: unknown; pl
         const prior = artworks.find(art => art.id === style.id);
         if (!prior || ids.has(style.id)) throw new ApiError(400, 'INVALID_ARTWORK_STYLE', '작품이 이 갤러리에 속하지 않거나 중복되었습니다.');
         ids.add(style.id);
-        const next: Artwork = { ...prior, ...style, matSizing: "inset" };
-        if (!validArtworkMat(next)) throw new ApiError(400, "INVALID_ARTWORK_MAT", "여백을 줄여 주세요. 사진 영역이 최소 1mm 남아야 합니다.");
+        const next: Artwork = { ...prior, ...style, matSizing: "inset", frameSizing: "inset" };
+        if (!validArtworkMat(next)) throw new ApiError(400, "INVALID_ARTWORK_MAT", "프레임 폭 또는 여백을 줄여 주세요. 사진 영역이 최소 1mm 남아야 합니다.");
         artworks = artworks.map(art => art.id === next.id ? next : art);
         changedArtworks.push(next);
       }

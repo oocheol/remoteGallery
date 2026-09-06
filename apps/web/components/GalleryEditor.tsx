@@ -270,13 +270,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     )
       return;
     const updated = { ...frameArt, ...patch };
-    const nextPlacements = placements.map((p) => {
-      const wall = workingScene.walls.find((w) => w.id === p.wallId);
-      return p.artworkId === updated.id && wall && !p.locked
-        ? clampPlacement(p, updated, wall)
-        : p;
-    });
-    commit(workingScene, nextPlacements, {
+    commit(workingScene, placements, {
       ...frameStyles,
       [updated.id]: { ...frameStyles[updated.id], ...patch },
     });
@@ -476,7 +470,10 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
           widthMm,
           heightMm,
           frameMaterial: "black",
-          frameWidthMm: 20,
+          frameWidthMm: Math.min(
+            20,
+            Math.max(0, Math.floor((Math.min(widthMm, heightMm) - 1) / 2)),
+          ),
           frameDepthMm: 25,
           matWidthMm: 0,
         }),
@@ -663,7 +660,7 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       {invalidPlacements.length > 0 || collisions.length > 0 ? (
         <p className="notice" role="alert">
           {invalidPlacements.length
-            ? "액자 전체 크기가 벽을 벗어납니다. 프레임 폭을 줄이거나 더 큰 벽으로 옮겨 주세요."
+            ? "액자 전체 크기가 벽을 벗어납니다. 작품 위치를 조절하거나 더 큰 벽으로 옮겨 주세요."
             : "액자끼리 겹칩니다. 위치를 조정한 후 저장해 주세요."}
         </p>
       ) : null}
@@ -1522,14 +1519,14 @@ function ArtworkShelf({
               }}
             >
               <label className="field" style={{ fontSize: 10 }}>
-                가로 mm
+                가로 mm · 액자 포함
                 <input
                   value={width}
                   onChange={(e) => setWidth(e.target.value)}
                 />
               </label>
               <label className="field" style={{ fontSize: 10 }}>
-                세로 mm
+                세로 mm · 액자 포함
                 <input
                   value={height}
                   onChange={(e) => setHeight(e.target.value)}

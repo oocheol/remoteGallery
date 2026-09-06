@@ -83,38 +83,62 @@ export function wallCoordinates(wall: Wall, point: Vec3): Vec2 {
     point[1],
   ];
 }
-/** Layout in millimeters; mat consumes the fixed no-mat image area. */
+/** Entered millimetres fix the outer frame; frame and mat consume its interior. */
 export function artworkLayout(artwork: Artwork) {
-  const outset = artwork.matSizing === "outset";
-  const maxMat = Math.max(
+  const legacyFrame = artwork.frameSizing === "outset";
+  const legacyMat = legacyFrame && artwork.matSizing === "outset";
+  const shortest = Math.min(artwork.widthMm, artwork.heightMm);
+  const frame = Math.max(
     0,
-    (Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2,
+    Math.min(
+      artwork.frameWidthMm,
+      legacyFrame ? Infinity : Math.max(0, (shortest - 1) / 2),
+    ),
   );
+  const matLimit = Math.max(0, (shortest - 1) / 2 - (legacyFrame ? 0 : frame));
   const mat = Math.max(
     0,
-    Math.min(artwork.matWidthMm ?? 0, outset ? Infinity : maxMat),
+    Math.min(artwork.matWidthMm ?? 0, legacyMat ? Infinity : matLimit),
   );
-  const boardWidthMm = artwork.widthMm + (outset ? 2 * mat : 0);
-  const boardHeightMm = artwork.heightMm + (outset ? 2 * mat : 0);
+  const boardWidthMm =
+    artwork.widthMm - (legacyFrame ? 0 : 2 * frame) + (legacyMat ? 2 * mat : 0);
+  const boardHeightMm =
+    artwork.heightMm -
+    (legacyFrame ? 0 : 2 * frame) +
+    (legacyMat ? 2 * mat : 0);
   return {
-    widthMm: boardWidthMm + 2 * artwork.frameWidthMm,
-    heightMm: boardHeightMm + 2 * artwork.frameWidthMm,
+    widthMm: legacyFrame ? boardWidthMm + 2 * frame : artwork.widthMm,
+    heightMm: legacyFrame ? boardHeightMm + 2 * frame : artwork.heightMm,
     boardWidthMm,
     boardHeightMm,
-    imageWidthMm: artwork.widthMm - (outset ? 0 : 2 * mat),
-    imageHeightMm: artwork.heightMm - (outset ? 0 : 2 * mat),
+    imageWidthMm: boardWidthMm - 2 * mat,
+    imageHeightMm: boardHeightMm - 2 * mat,
+    frameWidthMm: frame,
     matWidthMm: mat,
   };
 }
 export function validArtworkMat(
-  artwork: Pick<Artwork, "widthMm" | "heightMm" | "matWidthMm" | "matSizing">,
+  artwork: Pick<
+    Artwork,
+    | "widthMm"
+    | "heightMm"
+    | "frameWidthMm"
+    | "frameSizing"
+    | "matWidthMm"
+    | "matSizing"
+  >,
 ) {
   const mat = artwork.matWidthMm ?? 0;
+  const frame = artwork.frameWidthMm;
+  const legacyFrame = artwork.frameSizing === "outset";
   return (
     Number.isFinite(mat) &&
+    Number.isFinite(frame) &&
     mat >= 0 &&
-    (artwork.matSizing === "outset" ||
-      mat <= Math.max(0, (Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2))
+    frame >= 0 &&
+    ((legacyFrame && artwork.matSizing === "outset") ||
+      2 * (mat + (legacyFrame ? 0 : frame)) <=
+        Math.min(artwork.widthMm, artwork.heightMm) - 1)
   );
 }
 /** Overall frame dimensions in meters. Artwork millimeters are never scene-scaled. */

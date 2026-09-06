@@ -18,17 +18,19 @@ export function ArtworkFramePanel({
 }) {
   const patternId = useId().replaceAll(":", "");
   const frame = artwork.frameWidthMm;
+  const insetLimit = Math.max(
+    0,
+    Math.floor((Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2),
+  );
+  const frameLimit = Math.max(
+    0,
+    Math.min(1000, insetLimit - (artwork.matWidthMm ?? 0)),
+  );
   const mat = artwork.matWidthMm ?? 0;
   const layout = artworkLayout(artwork);
   const width = layout.widthMm;
   const height = layout.heightMm;
-  const matLimit = Math.max(
-    0,
-    Math.min(
-      1000,
-      Math.floor((Math.min(artwork.widthMm, artwork.heightMm) - 1) / 2),
-    ),
-  );
+  const matLimit = Math.max(0, Math.min(1000, Math.floor(insetLimit - frame)));
   const material = artwork.frameMaterial ?? "black";
   return (
     <section className="card frame-panel">
@@ -96,7 +98,7 @@ export function ArtworkFramePanel({
             onClick={() =>
               onChange({
                 frameMaterial: value,
-                frameWidthMm: frame || 20,
+                frameWidthMm: frame || Math.min(20, frameLimit),
                 frameDepthMm: artwork.frameDepthMm || 25,
               })
             }
@@ -116,7 +118,8 @@ export function ArtworkFramePanel({
       <FrameDimension
         label="프레임 폭"
         value={frame}
-        max={100}
+        max={Math.min(100, frameLimit)}
+        limit={frameLimit}
         onChange={(value) =>
           onChange({
             frameWidthMm: value,
@@ -146,7 +149,7 @@ export function ArtworkFramePanel({
       </div>
       <div className="frame-measurements">
         <span>
-          입력 크기 · 고정{" "}
+          입력 크기 · 액자 포함{" "}
           <strong>
             {artwork.widthMm} × {artwork.heightMm} mm
           </strong>
@@ -165,8 +168,8 @@ export function ArtworkFramePanel({
         </span>
       </div>
       <p className="frame-help">
-        입력 크기는 여백이 없을 때의 기준입니다. 여백은 그 안에 생기며 사진만
-        작아집니다. 상단 ‘저장’으로 보관합니다.
+        입력 크기는 액자까지 포함한 전체 크기입니다. 프레임과 여백은 그 안에
+        들어가며 사진만 작아집니다. 상단 ‘저장’으로 보관합니다.
       </p>
     </section>
   );

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import sharp from "sharp";
+import { artworkLayout, artworkSize } from "@gallery/three";
 import type {
   GalleryDetail,
   Artwork,
@@ -138,7 +139,10 @@ const wood = {
   frameDepthMm: 25,
   matWidthMm: 50,
 };
-const pair = [placement, { ...placement, id: randomUUID(), u: 1.9 }];
+const pair = [
+  { ...placement, u: 0.3 },
+  { ...placement, id: randomUUID(), u: 0.9 },
+];
 await save([plain], pair);
 detail = await api<GalleryDetail>(path);
 await save([wood], pair);
@@ -148,16 +152,30 @@ assert.deepEqual(
   pair,
   "adding inset mat must preserve positions and fit",
 );
+await save([{ ...wood, frameWidthMm: 100 }], pair, detail.exhibition.revision);
+detail = await api<GalleryDetail>(path);
+assert.equal(detail.artworks[0].frameWidthMm, 100);
+assert.deepEqual(
+  detail.exhibition.placements,
+  pair,
+  "frame changes preserve touching placements at wall edge",
+);
+assert.deepEqual(artworkSize(detail.artworks[0]), {
+  width: 0.6,
+  height: 0.9,
+  depth: 0.025,
+});
+assert.equal(artworkLayout(detail.artworks[0]).imageWidthMm, 300);
 await save(
-  [{ ...wood, frameWidthMm: 100 }],
+  [{ ...wood, frameWidthMm: 260 }],
   pair,
   detail.exhibition.revision,
   400,
 );
 assert.equal(
   (await api<GalleryDetail>(path)).artworks[0].frameWidthMm,
-  20,
-  "failed frame collision must roll back style",
+  100,
+  "invalid frame/mat combination rolls back",
 );
 await save([wood]);
 detail = await api<GalleryDetail>(path);
@@ -196,6 +214,9 @@ assert.equal(guest.status, 200);
 const snapshot: ShareSnapshot = await guest.json();
 assert.equal(snapshot.artworks[0].frameMaterial, "wood");
 assert.equal(snapshot.artworks[0].matSizing, "inset");
+assert.equal(snapshot.artworks[0].frameSizing, "inset");
+assert.equal(artworkLayout(snapshot.artworks[0]).widthMm, 600);
+assert.equal(artworkLayout(snapshot.artworks[0]).imageWidthMm, 460);
 assert.equal(
   snapshot.artworks[0].matWidthMm,
   50,
@@ -207,5 +228,5 @@ await writeFile(
   JSON.stringify({ galleryId: id, artworkId: art.id, shareToken: share.token }),
 );
 console.log(
-  "PASS: fixed inset mat, unchanged placement positions, save/reload, collision and boundary rollback, input validation, stale revision, immutable guest rendering data.",
+  "PASS: fixed outer frame dimensions, unchanged edge and touching placements, save/reload, combined frame/mat validation and rollback, stale revision, immutable shares.",
 );
