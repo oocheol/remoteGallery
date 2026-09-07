@@ -1,3 +1,5 @@
+import { uploadMimeType } from "@/lib/upload-types";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -32,12 +34,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const { upload } = await import("@vercel/blob/client");
     const assets = [];
     for (const original of files) {
-      const type =
-        original.type ||
-        (/\.hei[cf]$/i.test(original.name)
-          ? "image/heic"
-          : "application/octet-stream");
-      const file = original.type
+      const type = uploadMimeType(original);
+      const file = original.type === type
         ? original
         : new File([original], original.name, { type });
       const blob = await upload(`incoming/${crypto.randomUUID()}`, file, {

@@ -1498,11 +1498,14 @@ function ArtworkShelf({
           <ImagePlus size={14} /> 작품 파일 올리기
           <input
             type="file"
-            accept="image/png,image/jpeg,image/heic,image/heif,.heic"
+            accept="image/png,image/jpeg,image/heic,image/heif,image/tiff,image/x-tiff,.heic,.tif,.tiff"
             hidden
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
         </label>
+        <p className="muted" style={{ fontSize: 10, lineHeight: 1.4, margin: "6px 0 0" }}>
+          JPEG, PNG, HEIC, TIFF 파일을 지원합니다. TIFF는 첫 페이지만 사용합니다.
+        </p>
         {file ? (
           <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
             <label className="field" style={{ fontSize: 10 }}>
@@ -1791,7 +1794,7 @@ function ReconstructionPanel({
             hidden
             type="file"
             multiple
-            accept={mode === "video" ? "video/*" : "image/*,.heic"}
+            accept={mode === "video" ? "video/*" : "image/*,.heic,.tif,.tiff"}
             onChange={(e) => setFiles(Array.from(e.target.files || []))}
           />
         </label>

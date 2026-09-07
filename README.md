@@ -37,7 +37,7 @@ uv venv services/reconstruction/.venv --python 3.11
 uv pip install --python services/reconstruction/.venv/bin/python -r services/reconstruction/requirements.txt
 ```
 
-FFmpeg와 FFprobe는 PATH에서 실행 가능해야 합니다. HEIC는 macOS에서 `sips`, Vercel Linux에서 `heic-convert`로 디코딩합니다. JPEG/PNG 작품은 Sharp에서 EXIF 방향을 적용하고 메타데이터를 제거하며 최대 4096px로 정규화합니다.
+FFmpeg와 FFprobe는 PATH에서 실행 가능해야 합니다. HEIC는 macOS에서 `sips`, Vercel Linux에서 `heic-convert`로 디코딩합니다. JPEG/PNG 작품은 Sharp에서 EXIF 방향을 적용하고 메타데이터를 제거하며 최대 4096px로 정규화합니다. TIFF(`.tif`·`.tiff`) 이미지는 모든 업로드 역할에서 첫 페이지만 사용하고, 같은 방식으로 최대 4096px JPEG로 정규화합니다.
 
 `dev:local`은 `.env` 없이 사용할 수 있습니다. 웹과 worker에 같은 절대 저장 경로와 자동 생성된 `WORKER_TOKEN`을 전달합니다. 데이터는 `.gallery-twin/`에 저장합니다. 웹만 PGlite를 열고, worker는 내부 인증 HTTP 경로로 접근합니다. 별도 구성이 필요한 경우 `.env.example`의 변수 이름을 참고하세요.
 

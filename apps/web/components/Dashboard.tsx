@@ -388,7 +388,7 @@ export function Dashboard() {
                     <input
                       type="file"
                       multiple
-                      accept={mode === "video" ? "video/*" : "image/*,.heic"}
+                      accept={mode === "video" ? "video/*" : "image/*,.heic,.tif,.tiff"}
                       onChange={(e) =>
                         setFiles(Array.from(e.target.files || []))
                       }
@@ -398,7 +398,7 @@ export function Dashboard() {
                     className="muted"
                     style={{ fontSize: 12, lineHeight: 1.5, margin: 0 }}
                   >
-                    한 장의 사진이나 360° 이미지는 자동 공간 재구성을 지원하지
+                    사진은 JPEG, PNG, HEIC, TIFF 형식을 지원합니다. 한 장의 사진이나 360° 이미지는 자동 공간 재구성을 지원하지
                     않습니다. 다양한 각도와 이동이 있는 기록을 사용하세요.
                     제공된 와이아트갤러리 도면은 별도 프로젝트로 준비됩니다.
                   </p>

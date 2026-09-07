@@ -33,12 +33,13 @@ export async function POST(request: NextRequest) {
         return {
           allowedContentTypes:
             input.role === "artwork"
-              ? ["image/jpeg", "image/png", "image/heic", "image/heif"]
+              ? ["image/jpeg", "image/png", "image/heic", "image/heif", "image/tiff"]
               : [
                   "image/jpeg",
                   "image/png",
                   "image/heic",
                   "image/heif",
+                  "image/tiff",
                   "video/quicktime",
                   "video/mp4",
                 ],

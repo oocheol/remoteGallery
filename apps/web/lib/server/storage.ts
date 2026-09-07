@@ -12,6 +12,7 @@ import { basename, extname, join, relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { ApiError } from "./http";
+import { uploadMimeType } from "../upload-types";
 
 const roots = () => ({
   storage: resolve(process.env.GALLERY_CLOUD === "1" ? "/tmp/gallery-twin/storage" : (process.env.GALLERY_STORAGE_DIR || ".gallery-twin/storage")),
@@ -30,6 +31,7 @@ const mimeExtensions: Record<string, string> = {
   "image/png": ".png",
   "image/heic": ".heic",
   "image/heif": ".heic",
+  "image/tiff": ".tiff",
   "video/quicktime": ".mov",
   "video/mp4": ".mp4",
   "application/json": ".json",
@@ -38,7 +40,8 @@ const accepted = new Set(Object.keys(mimeExtensions));
 const maximumSize = 120 * 1024 * 1024;
 
 export async function validateUpload(file: File, role: string) {
-  if (!accepted.has(file.type) || file.size <= 0 || file.size > maximumSize)
+  const mimeType = uploadMimeType(file);
+  if (!accepted.has(mimeType) || file.size <= 0 || file.size > maximumSize)
     throw new ApiError(
       400,
       "UNSUPPORTED_UPLOAD",
@@ -46,7 +49,7 @@ export async function validateUpload(file: File, role: string) {
     );
   if (!["capture", "artwork", "reference"].includes(role))
     throw new ApiError(400, "INVALID_ROLE", "Asset role is invalid");
-  if (role === "artwork" && !file.type.startsWith("image/"))
+  if (role === "artwork" && !mimeType.startsWith("image/"))
     throw new ApiError(
       400,
       "UNSUPPORTED_UPLOAD",
@@ -67,11 +70,17 @@ export async function validateUpload(file: File, role: string) {
   const iso = ascii.slice(4, 8) === "ftyp";
   const heic = iso && /heic|heix|hevc|hevx|mif1|msf1/.test(ascii.slice(8, 32));
   const movie = iso && !heic;
+  const tiff =
+    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a) ||
+    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2b && bytes[3] === 0x00 && bytes[4] === 0x08 && bytes[5] === 0x00 && bytes[6] === 0x00 && bytes[7] === 0x00) ||
+    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2b && bytes[4] === 0x00 && bytes[5] === 0x08 && bytes[6] === 0x00 && bytes[7] === 0x00);
   const valid =
-    (file.type === "image/jpeg" && jpeg) ||
-    (file.type === "image/png" && png) ||
-    ((file.type === "image/heic" || file.type === "image/heif") && heic) ||
-    ((file.type === "video/quicktime" || file.type === "video/mp4") && movie);
+    (mimeType === "image/jpeg" && jpeg) ||
+    (mimeType === "image/png" && png) ||
+    ((mimeType === "image/heic" || mimeType === "image/heif") && heic) ||
+    (mimeType === "image/tiff" && tiff) ||
+    ((mimeType === "video/quicktime" || mimeType === "video/mp4") && movie);
   if (!valid)
     throw new ApiError(
       400,
@@ -83,7 +92,8 @@ export async function validateUpload(file: File, role: string) {
 export async function saveUpload(galleryId: string, file: File, role: string) {
   const { storage } = roots();
   const id = randomUUID();
-  const ext = mimeExtensions[file.type] || extname(file.name).toLowerCase();
+  const mimeType = uploadMimeType(file);
+  const ext = mimeExtensions[mimeType] || extname(file.name).toLowerCase();
   const dir = safeJoin(storage, galleryId);
   await mkdir(dir, { recursive: true });
   const originalPath = safeJoin(dir, `${id}${ext}`);
@@ -91,16 +101,17 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
     flag: "wx",
   });
   if (
-    file.type === "image/heic" ||
-    file.type === "image/heif" ||
-    (role === "artwork" && file.type.startsWith("image/"))
+    mimeType === "image/heic" ||
+    mimeType === "image/heif" ||
+    mimeType === "image/tiff" ||
+    (role === "artwork" && mimeType.startsWith("image/"))
   ) {
     const normalizedPath = safeJoin(dir, `${id}.normalized.jpg`);
     const finalPath = safeJoin(dir, `${id}.jpg`);
     try {
       let sourcePath = originalPath;
       const heicPath = safeJoin(dir, `${id}.decoded.jpg`);
-      if (file.type === "image/heic" || file.type === "image/heif") {
+      if (mimeType === "image/heic" || mimeType === "image/heif") {
         if (process.platform === "darwin") {
           await run("sips", ["-s", "format", "jpeg", originalPath, "--out", heicPath], 30_000);
         } else {
@@ -110,7 +121,7 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
         sourcePath = heicPath;
       }
       // Sharp strips EXIF/XMP/IPTC by default. Rotate from EXIF first, bound texture size.
-      await sharp(sourcePath, { limitInputPixels: 80_000_000 })
+      await sharp(sourcePath, { limitInputPixels: 80_000_000, page: 0, pages: 1 })
         .autoOrient()
         .resize({
           width: 4096,
@@ -147,7 +158,7 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
     id,
     path: originalPath,
     name: safeName(file.name, ext),
-    mimeType: file.type,
+    mimeType,
     size: file.size,
   });
 }
