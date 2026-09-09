@@ -259,3 +259,25 @@ export async function commitWorkerReady(id: string, input: { scene: unknown; mes
     return toJob({ ...job, status: 'READY', progress: 100, message: input.message, error: null, scene_id: input.sceneId || scene.id, updated_at: timestamp });
   });
 }
+
+/** Remove from the editable exhibition; frozen shares keep their image assets. */
+export async function deleteArtwork(id: string, expectedRevision: unknown) {
+  return withTransaction(async db => {
+    const art = (await db.query<{ gallery_id: string }>('SELECT gallery_id FROM artworks WHERE id=$1', [id])).rows[0];
+    if (!art) throw new ApiError(404, 'ARTWORK_NOT_FOUND', '이미 삭제되었거나 존재하지 않는 작품입니다.');
+    const ex = (await db.query<{ revision: number; placements: unknown }>('SELECT revision,placements FROM exhibitions WHERE gallery_id=$1', [art.gallery_id])).rows[0];
+    if (!Number.isInteger(expectedRevision) || expectedRevision !== ex.revision) throw new ApiError(409, 'REVISION_CONFLICT', '다른 저장본이 있습니다. 새로고침 후 다시 삭제해 주세요.');
+    const placements = json<Placement[]>(ex.placements).filter(p => p.artworkId !== id);
+    const timestamp = now();
+    const sceneRow = (await db.query<{ scene: unknown }>('SELECT scene FROM scenes WHERE gallery_id=$1', [art.gallery_id])).rows[0];
+    if (sceneRow) {
+      const scene = json<Scene>(sceneRow.scene);
+      scene.observers = scene.observers?.filter(o => placements.some(p => p.id === o.placementId));
+      await db.query('UPDATE scenes SET scene=$1,updated_at=$2 WHERE gallery_id=$3', [JSON.stringify(scene), timestamp, art.gallery_id]);
+    }
+    await db.query('UPDATE exhibitions SET placements=$1,revision=revision+1,updated_at=$2 WHERE gallery_id=$3', [JSON.stringify(placements), timestamp, art.gallery_id]);
+    await db.query('DELETE FROM artworks WHERE id=$1', [id]);
+    await db.query('UPDATE galleries SET updated_at=$1 WHERE id=$2', [timestamp, art.gallery_id]);
+    return { id, revision: ex.revision + 1, updatedAt: timestamp };
+  });
+}

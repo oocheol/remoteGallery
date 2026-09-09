@@ -451,8 +451,9 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
     widthMm: number,
     heightMm: number,
   ) {
-    if (!detail) return;
+    if (!detail) throw new Error("프로젝트가 아직 준비되지 않았습니다.");
     setError("");
+    setMessage("");
     try {
       const form = new FormData();
       form.set("galleryId", detail.gallery.id);
@@ -488,10 +489,65 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
       setSelectedArtworkId(art.id);
       setMessage("작품을 업로드했습니다. 선택한 벽에 추가할 수 있습니다.");
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "작품을 업로드하지 못했습니다.",
-      );
+      throw e;
     }
+  }
+  async function removeArtwork(id: string) {
+    if (!detail || saving)
+      throw new Error("저장이 끝난 후 다시 시도해 주세요.");
+    const result = await api<{ revision: number; updatedAt: string }>(
+      `/api/artworks/${id}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ expectedRevision: detail.exhibition.revision }),
+      },
+    );
+    const strip = (scene: Scene, items: Placement[]) => ({
+      ...scene,
+      observers: scene.observers?.filter(
+        (o) => !items.some((p) => p.id === o.placementId && p.artworkId === id),
+      ),
+    });
+    setDetail((current) =>
+      current
+        ? {
+            ...current,
+            artworks: current.artworks.filter((a) => a.id !== id),
+            exhibition: {
+              ...current.exhibition,
+              revision: result.revision,
+              updatedAt: result.updatedAt,
+              placements: current.exhibition.placements.filter(
+                (p) => p.artworkId !== id,
+              ),
+            },
+          }
+        : current,
+    );
+    setWorkingScene((current) =>
+      current ? strip(current, placements) : current,
+    );
+    setPlacements((current) => current.filter((p) => p.artworkId !== id));
+    const cleanSnapshot = (item: Snapshot) => ({
+      ...item,
+      revision: result.revision,
+      scene: strip(item.scene, item.placements),
+      placements: item.placements.filter((p) => p.artworkId !== id),
+      frameStyles: Object.fromEntries(
+        Object.entries(item.frameStyles).filter(([key]) => key !== id),
+      ),
+    });
+    setHistory((items) => items.map(cleanSnapshot));
+    setFuture((items) => items.map(cleanSnapshot));
+    setFrameStyles((items) =>
+      Object.fromEntries(Object.entries(items).filter(([key]) => key !== id)),
+    );
+    setSelectedArtworkId((current) => (current === id ? undefined : current));
+    setSelectedIds((current) =>
+      current.filter(
+        (key) => !placements.some((p) => p.id === key && p.artworkId === id),
+      ),
+    );
   }
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -975,6 +1031,8 @@ export function GalleryEditor({ galleryId }: { galleryId: string }) {
                 wallName={selectedWall?.name}
                 onAdd={addArtwork}
                 onUpload={uploadArt}
+                onDelete={removeArtwork}
+                deleteDisabled={saving || history.length > 0}
               />
             </section>
             <ObserverPanel
@@ -1379,9 +1437,13 @@ function ArtworkShelf({
   onSelect,
   onAdd,
   onUpload,
+  onDelete,
+  deleteDisabled,
   wallName,
 }: {
   artworks: Artwork[];
+  onDelete: (id: string) => Promise<void>;
+  deleteDisabled: boolean;
   wallName?: string;
   selected?: string;
   onSelect: (id: string) => void;
@@ -1394,23 +1456,57 @@ function ArtworkShelf({
   ) => Promise<void>;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Artwork | null>(null);
+  const [feedback, setFeedback] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [width, setWidth] = useState("600");
   const [height, setHeight] = useState("900");
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (!file || uploading) return;
+    setFeedback(null);
+    const w = Number(width),
+      h = Number(height);
+    if (![w, h].every((n) => Number.isFinite(n) && n > 0 && n <= 100000)) {
+      setFeedback({
+        ok: false,
+        text: "업로드 실패: 가로·세로는 0보다 크고 100,000mm 이하인 숫자로 입력해 주세요.",
+      });
+      return;
+    }
+    if (file.size > 120 * 1024 * 1024 || file.size === 0) {
+      setFeedback({
+        ok: false,
+        text: "업로드 실패: 파일은 0바이트보다 크고 120MB 이하여야 합니다.",
+      });
+      return;
+    }
     setUploading(true);
     try {
       await onUpload(
         file,
         title.trim() || file.name.replace(/\.[^.]+$/, ""),
-        num(width, 600),
-        num(height, 900),
+        w,
+        h,
       );
+      setFeedback({
+        ok: true,
+        text: `업로드 성공: ${file.name} — 작품 목록에 추가했습니다.`,
+      });
       setFile(null);
       setTitle("");
+      if (fileInput.current) fileInput.current.value = "";
+    } catch (e) {
+      setFeedback({
+        ok: false,
+        text: `업로드 실패: ${e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다."} 입력한 파일과 크기를 확인한 뒤 다시 시도해 주세요.`,
+      });
     } finally {
       setUploading(false);
     }
@@ -1426,7 +1522,7 @@ function ArtworkShelf({
             key={art.id}
             style={{
               display: "grid",
-              gridTemplateColumns: "36px 1fr auto",
+              gridTemplateColumns: "36px minmax(0,1fr) auto auto",
               gap: 7,
               alignItems: "center",
               border:
@@ -1487,9 +1583,68 @@ function ArtworkShelf({
             >
               <Plus size={15} /> 배치
             </button>
+            <button
+              type="button"
+              className="btn ghost"
+              style={{ padding: "0 6px", minHeight: 30 }}
+              aria-label={`${art.title} 삭제`}
+              title={
+                deleteDisabled ? "변경 사항을 먼저 저장해 주세요" : "작품 삭제"
+              }
+              disabled={deleteDisabled || uploading || !!deleting}
+              onClick={() => {
+                setPendingDelete(art);
+                setFeedback(null);
+              }}
+            >
+              <Trash2 size={14} /> 삭제
+            </button>
           </div>
         ))}
       </div>
+      {pendingDelete && (
+        <div className="notice" role="alert">
+          <strong>“{pendingDelete.title}”을 삭제할까요?</strong>
+          <p>
+            작품 목록, 벽 배치와 연결된 관람자를 함께 삭제합니다. 기존 공유
+            링크는 유지됩니다.
+          </p>
+          <button
+            className="btn"
+            disabled={!!deleting}
+            onClick={() => setPendingDelete(null)}
+          >
+            취소
+          </button>{" "}
+          <button
+            className="btn primary"
+            disabled={!!deleting || deleteDisabled}
+            onClick={async () => {
+              const art = pendingDelete;
+              setDeleting(art.id);
+              try {
+                await onDelete(art.id);
+                setPendingDelete(null);
+                setFeedback({ ok: true, text: `삭제 완료: ${art.title}` });
+              } catch (e) {
+                setFeedback({
+                  ok: false,
+                  text: `삭제 실패: ${e instanceof Error ? e.message : "다시 시도해 주세요."}`,
+                });
+              } finally {
+                setDeleting(null);
+              }
+            }}
+          >
+            {deleting ? "삭제 중…" : "삭제 확인"}
+          </button>
+        </div>
+      )}
+      {deleteDisabled && (
+        <p className="muted" style={{ fontSize: 11 }}>
+          작품을 삭제하려면 변경 사항을 먼저 저장해 주세요.
+        </p>
+      )}
       <form
         onSubmit={submit}
         style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}
@@ -1497,14 +1652,23 @@ function ArtworkShelf({
         <label className="btn ghost" style={{ width: "100%" }}>
           <ImagePlus size={14} /> 작품 파일 올리기
           <input
+            ref={fileInput}
+            disabled={uploading || !!deleting}
             type="file"
             accept="image/png,image/jpeg,image/heic,image/heif,image/tiff,image/x-tiff,.heic,.tif,.tiff"
             hidden
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              setFile(e.target.files?.[0] || null);
+              setFeedback(null);
+            }}
           />
         </label>
-        <p className="muted" style={{ fontSize: 10, lineHeight: 1.4, margin: "6px 0 0" }}>
-          JPEG, PNG, HEIC, TIFF 파일을 지원합니다. TIFF는 첫 페이지만 사용합니다.
+        <p
+          className="muted"
+          style={{ fontSize: 10, lineHeight: 1.4, margin: "6px 0 0" }}
+        >
+          JPEG, PNG, HEIC, TIFF · 최대 120MB, 2억 픽셀. TIFF는 첫 페이지만
+          사용합니다.
         </p>
         {file ? (
           <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
@@ -1540,10 +1704,26 @@ function ArtworkShelf({
             </div>
             <button className="btn primary" disabled={uploading}>
               {uploading ? <LoaderCircle size={14} /> : <Upload size={14} />}{" "}
-              업로드
+              {uploading ? "업로드 중…" : "업로드"}
             </button>
           </div>
         ) : null}
+        {uploading && <p role="status">사진을 업로드하고 변환하는 중입니다…</p>}
+        {feedback && (
+          <p
+            role={feedback.ok ? "status" : "alert"}
+            style={{
+              padding: 10,
+              fontSize: 12,
+              lineHeight: 1.6,
+              overflowWrap: "anywhere",
+              color: feedback.ok ? "#17623c" : "#a52d22",
+              background: feedback.ok ? "#eaf5ec" : "#fff0ed",
+            }}
+          >
+            {feedback.text}
+          </p>
+        )}
       </form>
     </>
   );

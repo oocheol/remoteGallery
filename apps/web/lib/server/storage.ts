@@ -15,8 +15,16 @@ import { ApiError } from "./http";
 import { uploadMimeType } from "../upload-types";
 
 const roots = () => ({
-  storage: resolve(process.env.GALLERY_CLOUD === "1" ? "/tmp/gallery-twin/storage" : (process.env.GALLERY_STORAGE_DIR || ".gallery-twin/storage")),
-  jobs: resolve(process.env.GALLERY_CLOUD === "1" ? "/tmp/gallery-twin/jobs" : (process.env.GALLERY_JOBS_DIR || ".gallery-twin/jobs")),
+  storage: resolve(
+    process.env.GALLERY_CLOUD === "1"
+      ? "/tmp/gallery-twin/storage"
+      : process.env.GALLERY_STORAGE_DIR || ".gallery-twin/storage",
+  ),
+  jobs: resolve(
+    process.env.GALLERY_CLOUD === "1"
+      ? "/tmp/gallery-twin/jobs"
+      : process.env.GALLERY_JOBS_DIR || ".gallery-twin/jobs",
+  ),
 });
 export const jobDirectory = (jobId: string) => safeJoin(roots().jobs, jobId);
 export const safeJoin = (root: string, ...parts: string[]) => {
@@ -45,7 +53,7 @@ export async function validateUpload(file: File, role: string) {
     throw new ApiError(
       400,
       "UNSUPPORTED_UPLOAD",
-      "Upload type or size is not supported",
+      "지원하지 않는 형식이거나 파일이 비어 있습니다. JPEG·PNG·HEIC·TIFF 파일은 120MB 이하로 올려 주세요.",
     );
   if (!["capture", "artwork", "reference"].includes(role))
     throw new ApiError(400, "INVALID_ROLE", "Asset role is invalid");
@@ -71,10 +79,30 @@ export async function validateUpload(file: File, role: string) {
   const heic = iso && /heic|heix|hevc|hevx|mif1|msf1/.test(ascii.slice(8, 32));
   const movie = iso && !heic;
   const tiff =
-    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
-    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a) ||
-    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2b && bytes[3] === 0x00 && bytes[4] === 0x08 && bytes[5] === 0x00 && bytes[6] === 0x00 && bytes[7] === 0x00) ||
-    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2b && bytes[4] === 0x00 && bytes[5] === 0x08 && bytes[6] === 0x00 && bytes[7] === 0x00);
+    (bytes[0] === 0x49 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x2a &&
+      bytes[3] === 0x00) ||
+    (bytes[0] === 0x4d &&
+      bytes[1] === 0x4d &&
+      bytes[2] === 0x00 &&
+      bytes[3] === 0x2a) ||
+    (bytes[0] === 0x49 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x2b &&
+      bytes[3] === 0x00 &&
+      bytes[4] === 0x08 &&
+      bytes[5] === 0x00 &&
+      bytes[6] === 0x00 &&
+      bytes[7] === 0x00) ||
+    (bytes[0] === 0x4d &&
+      bytes[1] === 0x4d &&
+      bytes[2] === 0x00 &&
+      bytes[3] === 0x2b &&
+      bytes[4] === 0x00 &&
+      bytes[5] === 0x08 &&
+      bytes[6] === 0x00 &&
+      bytes[7] === 0x00);
   const valid =
     (mimeType === "image/jpeg" && jpeg) ||
     (mimeType === "image/png" && png) ||
@@ -85,7 +113,7 @@ export async function validateUpload(file: File, role: string) {
     throw new ApiError(
       400,
       "UPLOAD_SIGNATURE_INVALID",
-      "File contents do not match its declared type",
+      "파일 확장자와 실제 이미지 형식이 일치하지 않거나 파일이 손상되었습니다. 원본 프로그램에서 다시 내보내 주세요.",
     );
 }
 
@@ -113,15 +141,30 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
       const heicPath = safeJoin(dir, `${id}.decoded.jpg`);
       if (mimeType === "image/heic" || mimeType === "image/heif") {
         if (process.platform === "darwin") {
-          await run("sips", ["-s", "format", "jpeg", originalPath, "--out", heicPath], 30_000);
+          await run(
+            "sips",
+            ["-s", "format", "jpeg", originalPath, "--out", heicPath],
+            30_000,
+          );
         } else {
           const convert = (await import("heic-convert")).default;
-          await writeFile(heicPath, await convert({ buffer: await readFile(originalPath), format: "JPEG", quality: 0.95 }));
+          await writeFile(
+            heicPath,
+            await convert({
+              buffer: await readFile(originalPath),
+              format: "JPEG",
+              quality: 0.95,
+            }),
+          );
         }
         sourcePath = heicPath;
       }
       // Sharp strips EXIF/XMP/IPTC by default. Rotate from EXIF first, bound texture size.
-      await sharp(sourcePath, { limitInputPixels: 80_000_000, page: 0, pages: 1 })
+      await sharp(sourcePath, {
+        limitInputPixels: 200_000_000,
+        page: 0,
+        pages: 1,
+      })
         .autoOrient()
         .resize({
           width: 4096,
@@ -134,26 +177,32 @@ export async function saveUpload(galleryId: string, file: File, role: string) {
       await rm(originalPath);
       await rm(heicPath, { force: true });
       await rename(normalizedPath, finalPath);
-      return await persistUpload(galleryId, {
-        id,
-        path: finalPath,
-        name: safeName(file.name, ".jpg"),
-        mimeType: "image/jpeg",
-        size: (await readFile(finalPath)).byteLength,
-      });
-    } catch {
+    } catch (error) {
       await Promise.all(
         [originalPath, normalizedPath, safeJoin(dir, `${id}.decoded.jpg`)].map(
           (p) => rm(p, { force: true }),
         ),
       );
+      const reason =
+        error instanceof Error ? error.message : "Unknown image error";
+      console.error("Image normalization failed", { mimeType, reason });
       throw new ApiError(
         422,
         "IMAGE_NORMALIZATION_FAILED",
-        "This image could not be normalized",
+        /pixel limit/i.test(reason)
+          ? "이미지 해상도가 2억 픽셀 제한을 초과했습니다. 가로 × 세로가 200,000,000 이하가 되도록 축소해 주세요."
+          : "이미지를 변환하지 못했습니다. 파일이 손상되었거나 지원하지 않는 압축 방식일 수 있습니다. TIFF는 LZW 또는 무압축으로 다시 저장해 주세요.",
       );
     }
+    return await persistUpload(galleryId, {
+      id,
+      path: finalPath,
+      name: safeName(file.name, ".jpg"),
+      mimeType: "image/jpeg",
+      size: (await readFile(finalPath)).byteLength,
+    });
   }
+
   return persistUpload(galleryId, {
     id,
     path: originalPath,
@@ -214,18 +263,37 @@ export async function saveGeneratedFile(
   };
 }
 
-async function persistUpload(galleryId: string, record: { id: string; path: string; name: string; mimeType: string; size: number }) {
+async function persistUpload(
+  galleryId: string,
+  record: {
+    id: string;
+    path: string;
+    name: string;
+    mimeType: string;
+    size: number;
+  },
+) {
   if (process.env.GALLERY_CLOUD !== "1") return record;
-  const blob = await put(`${galleryId}/${record.id}${extname(record.path)}`, await readFile(record.path), { access: "private", contentType: record.mimeType, addRandomSuffix: false });
+  const blob = await put(
+    `${galleryId}/${record.id}${extname(record.path)}`,
+    await readFile(record.path),
+    { access: "private", contentType: record.mimeType, addRandomSuffix: false },
+  );
   await rm(record.path, { force: true });
   return { ...record, path: `blob:${blob.pathname}` };
 }
 
 export async function readPrivateAsset(path: string) {
   if (path.startsWith("blob:")) {
-    if (process.env.GALLERY_CLOUD !== "1") throw new ApiError(404, "ASSET_MISSING", "Cloud asset is not available locally");
+    if (process.env.GALLERY_CLOUD !== "1")
+      throw new ApiError(
+        404,
+        "ASSET_MISSING",
+        "Cloud asset is not available locally",
+      );
     const blob = await get(path.slice(5), { access: "private" });
-    if (!blob || blob.statusCode !== 200) throw new ApiError(404, "ASSET_MISSING", "Asset file is missing");
+    if (!blob || blob.statusCode !== 200)
+      throw new ApiError(404, "ASSET_MISSING", "Asset file is missing");
     return blob.stream;
   }
   const absolute = resolve(path);

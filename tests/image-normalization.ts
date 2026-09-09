@@ -114,6 +114,11 @@ try {
 
   await assert.rejects(() => validateUpload(new File(["not an image"], "fake.jpg", { type: "image/jpeg" }), "artwork"));
   await assert.rejects(() => validateUpload(new File(["not a TIFF"], "spoof.tiff", { type: "image/tiff" }), "artwork"));
+  const highResolutionTiff = await sharp({ create: { width: 10000, height: 9000, channels: 3, background: "#796548" } }).tiff({ compression: "lzw" }).toBuffer();
+  const highResolution = await saveUpload("90mp-tiff", new File([highResolutionTiff], "large.tif", { type: "image/tiff" }), "artwork");
+  const highMetadata = await sharp(await readFile(highResolution.path)).metadata();
+  assert.equal(highMetadata.width, 4096, "TIFF above the former 80MP limit should normalize");
+  assert.equal(highMetadata.height, 3686);
   const truncated = new File([tiff.subarray(0, 12)], "truncated.tiff", { type: "image/tiff" });
   await validateUpload(truncated, "reference");
   await assert.rejects(() => saveUpload("failed-tiff", truncated, "reference"));
